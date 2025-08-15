@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Manhunt 2 - PC - Test</title>
+        <style>* { padding: 0; margin: 0;}</style>
+        <script src="../../src/Layer0/FileHandler/RenderwareLoader.mjs"></script>
+    </head>
+    <body>
+
+        <div id="webgl" style="height: 100vh"></div>
+        <div id="canvas"></div>
+
+        <script type="module">
+
+            import Database from "/src/Layer0/Database.mjs";
+            import WebGl from "/src/Layer2/WebGl.mjs";
+            import MimeType from "/src/Layer0/MimeType.mjs";
+            import {Color, Skeleton, Vector3, Matrix4, Bone, AnimationMixer, SkeletonHelper as TSkeletonHelper } from "/src/Vendor/three.module.mjs";
+            import ResourceLoader from "/src/Layer1/ResourceLoader.mjs";
+            import ManhuntMatrix from "/src/Layer1/ManhuntMatrix.mjs";
+            import Manhunt2MDL from "../../src/Layer0/FileGenerator/Manhunt2.MDL.mjs";
+            import ModelMdl from "../../src/Layer0/FileHandler/Model.Mdl.mjs";
+            import SkeletonHelper from "../../src/Layer2/SkeletonHelper.mjs";
+            import ModelHelper from "../../src/Layer2/ModelHelper.mjs";
+            // import {FBXLoader} from "../../src/Vendor/FBXLoader.mjs";
+
+
+            // const fbxLoader = new FBXLoader()
+            // fbxLoader.load(
+            //     '/Resources/mk.fbx',
+            //     (object) => {
+            //         // object.traverse(function (child) {
+            //         //     if ((child as THREE.Mesh).isMesh) {
+            //         //         // (child as THREE.Mesh).material = material
+            //         //         if ((child as THREE.Mesh).material) {
+            //         //             ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).transparent = false
+            //         //         }
+            //         //     }
+            //         // })
+            //         // object.scale.set(.01, .01, .01)
+            //         WebGl.scene.add(object)
+            //         // console.log(object);
+            //         // die;
+            //     },
+            //     (xhr) => {
+            //         console.log((xhr.loaded / xhr.total) * 100 + '% loaded')
+            //     },
+            //     (error) => {
+            //         console.log(error)
+            //     }
+            // )
+            //
+
+
+            // const resLoader = new ResourceLoader();
+            await ResourceLoader.load([
+
+
+
+                //Load MH2 PS2 Model
+                // '/Resources/Manhunt2/ps2/DASY.TXD',
+                // '/Resources/Manhunt2/ps2/DASY.DFF',
+
+                //Load MH2 WII Model
+                // '/Resources/Manhunt2/wii/Leo_Ingame-LCas_wii.txd',
+                // '/Resources/Manhunt2/wii/Leo_Ingame-LCas_wii.dff',
+                // '/Resources/Manhunt2/wii/modelswii.dff',
+
+                // //Load MH2 PC Model
+                '/Resources/Manhunt2/pc/danny_ingame-dasy_pc.tex',
+                '/Resources/Manhunt2/pc/danny_ingame-dasy_pc.mdl',
+                // '/Resources/Skeleton/manhunt_2_pc_player_custom.mdl',
+
+                // '/Resources/Manhunt2/pc/modelspc.tex',
+                // '/Resources/Manhunt2/pc/modelspc.mdl',
+                // //
+                // // //Load MH1 PC Model
+                // '/Resources/Manhunt/pc/cash_pc.txd',
+                // '/Resources/Manhunt/pc/cash_pc.dff',
+                // //
+                // // // Load MH2 PSP 001 Texture
+                '/Resources/Manhunt2/psp_001/CutScene_MODELS.TXD',
+                '/Resources/Manhunt2/psp_001/CutScene_MODELS.DFF',
+
+                // '/Resources/7Sins/w2_t_nude_1.dff',
+
+            ]);
+
+            // Load MH2 PSP 001 Model
+            // await resLoader.load('/Resources/Manhunt2/psp_001/CutScene_MODELS.DFF', {
+            //     platform: 'psp'
+            // });
+
+            //Load MH2 PC Animation
+            await ResourceLoader.load('/Resources/Manhunt2/pc/allanims_pc.ifp', {
+                source: { game: "mh2", platform: "pc" }
+            });
+
+            /**
+             *
+             * @param {Group} model
+             * @param {AnimationClip} animationClip
+             * @return {Promise<void>}
+             */
+            function helperPlayAnimation(model, animationClip){
+                console.log(
+                    model
+                );
+                const skeleton = model.children[0].children[0].skeleton;
+                // const skeleton = model.children[0].skeleton;
+                WebGl.scene.add( model );
+                model.userData.skeletionHelper = new TSkeletonHelper( model.children[0] );
+                WebGl.scene.add( model.userData.skeletionHelper );
+
+                // model.children[0].skeleton.bones[0].updateWorldMatrix(true, true);
+                ManhuntMatrix.removeInvalidAnimationBonesBasedOnSkeleton(model.children[0].skeleton, animationClip);
+
+                // const mixer = new AnimationMixer(model);
+                // mixer.clipAction(animationClip).play()
+                //
+                // WebGl.onRender((delta) => { mixer.update(delta);});
+            }
+
+            function logSkeletonHierarchy(skeleton, text = "") {
+                const rootBones = skeleton.bones.filter((bone) => {
+                    return !(bone.parent instanceof Bone);
+                });
+
+                rootBones.forEach((rootBone) => {
+                    logBoneHierarchy(rootBone, '');
+                });
+
+                function logBoneHierarchy(bone, prefix) {
+                    text += prefix + bone.userData.name + "(" +bone.userData.boneId + ")\n";
+
+                    bone.children.forEach((child) => {
+                        if (child instanceof Bone) {
+                            logBoneHierarchy(child, prefix + '  ');
+                        }
+                    });
+                }
+
+                return text;
+            }
+
+            // function download(){
+            //     const url = window.URL.createObjectURL(new Blob([mdl.data], { type: 'application/octet-stream' }));
+            //
+            //     const a = document.createElement('a');
+            //     a.href = url;
+            //     a.download = 'example.mdl';
+            //
+            //     document.body.appendChild(a);
+            //     a.click();
+            //
+            //     document.body.removeChild(a);
+            //     window.URL.revokeObjectURL(url);
+            // }
+
+            async function reimportMdl( model, newModelName ){
+                await ModelMdl.process(Manhunt2MDL.build([model]), { name: newModelName });
+                return await Database.findOneBy({ type: MimeType.MODEL, name:newModelName }).decode();
+            }
+
+            const animation = Database.findOneBy({ type: MimeType.ANIMATION, name: "BAT_IDLE_PISS_ANIM" });
+
+            /**
+             * @type {Group} refModel
+             */
+            let refModel;
+
+            //MH2 PC to MH2 PC
+            {
+                //
+                // const modelManhunt2PcPic = await Database.findBy({ type: MimeType.MODEL, name: "pic_bodA", file: "modelspc.mdl" })[0].decode();
+                // helperPlayAnimation(modelManhunt2PcPic, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+                // modelManhunt2PcPic.position.x = -.5
+
+
+                const modelManhunt2Pc = await Database.findBy({ type: MimeType.MODEL, file: "danny_ingame-dasy_pc.mdl" })[0].decode();
+                // helperPlayAnimation(modelManhunt2Pc, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+                // modelManhunt2Pc.position.x = 0;
+                refModel = modelManhunt2Pc;
+                //
+                // //
+                // const remodel = await reimportMdl(modelManhunt2Pc, 'mh2_pc_to_mh2_pc');
+                // remodel.position.x = 0;
+                // remodel.position.z = 0.5;
+                // helperPlayAnimation(remodel, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            }
+            //
+            // //MH2 PS2 to MH2 PC
+            // {
+            //     const modelManhunt2Ps2 = await Database.findBy({ type: MimeType.MODEL, name: "Danny_Ingame-DAsy", file: "DASY.DFF" })[0].decode();
+            //     SkeletonHelper.applyMissedBones(refModel.children[0].skeleton, modelManhunt2Ps2.children[0].skeleton);
+            //     helperPlayAnimation(modelManhunt2Ps2, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            //     modelManhunt2Ps2.position.x = -1
+            //
+            //     const remodel = await reimportMdl(modelManhunt2Ps2, 'mh2_ps2_to_mh2_pc');
+            //     remodel.position.x = -1;
+            //     remodel.position.z = 0.5;
+            //     helperPlayAnimation(remodel, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            // }
+            //
+            // //MH1 PC to MH2 PC
+            // {
+            //     const modelManhuntPc = await Database.findOneBy({ type: MimeType.MODEL, file: "cash_pc.dff"}).decode({
+            //         applyBoneOrderFrom: refModel.children[0].skeleton.bones,
+            //         applyScaleFactor: 0.8458542069377359, //MH1=>Mh2
+            //     });
+            //
+            //     SkeletonHelper.applyMissedBones(refModel.children[0].skeleton, modelManhuntPc.children[0].skeleton);
+            //     modelManhuntPc.position.x = 1
+            //     helperPlayAnimation(modelManhuntPc, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            //     //
+            //     const remodel = await reimportMdl(modelManhuntPc, 'mh_pc_to_mh2_pc');
+            //     remodel.position.x = 1;
+            //     remodel.position.z = .5;
+            //     helperPlayAnimation(remodel, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            // }
+            //
+            // //MH2 PSP 001 to MH2 PC
+            // {
+                const modelManhunt2Psp001 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode({
+                    applyBoneOrderFrom: refModel.children[0].skeleton.bones
+                });
+                SkeletonHelper.applyMissedBones(refModel.children[0].skeleton, modelManhunt2Psp001.children[0].skeleton);
+                modelManhunt2Psp001.position.x = 2;
+                helperPlayAnimation(modelManhunt2Psp001, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+
+                const remodel = await reimportMdl(modelManhunt2Psp001, 'mh2_psp001_to_mh2_pc');
+                remodel.position.x = 2;
+                remodel.position.z = .5;
+                helperPlayAnimation(remodel, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            // }
+            //
+
+
+
+
+
+
+//             {
+//                 const model7Sins = await Database.findOneBy({ type: MimeType.MODEL, name: "tag=110"}).decode({
+//                     // applyBoneOrderFrom: refModel.children[0].skeleton.bones,
+//                     applyScaleFactor: 0.0097,
+//                 });
+//
+//                 // refModel.children[0].visible = false;
+//                 // model7Sins.children[0].visible = false;
+//
+//                 // model7Sins.children[0].skeleton.bones[0].attach(model7Sins.children[0].skeleton.getBoneByName('bone_1000'));
+//                 // model7Sins.children[0].skeleton.bones[0].attach(model7Sins.children[0].skeleton.getBoneByName('Danny_Broken_Cutscene_L0'));
+//
+//                 // const a = model7Sins.children[0].skeleton.getBoneByName('bone_1000')
+//                 // a.attach(model7Sins.children[0].skeleton.getBoneByName('bone_1096'))
+//
+//                 // const spine2 = model7Sins.children[0].skeleton.getBoneByName('bone_1096')
+//                 // spine2.attach(model7Sins.children[0].skeleton.getBoneByName('bone_1040'))
+//                 // spine2.attach(model7Sins.children[0].skeleton.getBoneByName('bone_1003'))
+//                 // spine2.attach(model7Sins.children[0].skeleton.getBoneByName('bone_1057'))
+// // //
+//
+// // console.log(refModel.children[0].skeleton.bones);
+// // console.log(model7Sins.children[0].skeleton.bones);
+// // die;
+//
+//
+//
+//
+// //                 const newOrderBones = [];
+// //                 refModel.children[0].skeleton.bones.forEach((b) => {
+// //                     let tBone = model7Sins.children[0].skeleton.bones.find((sB) => sB.userData.name === b.userData.name);
+// //                     if (tBone) newOrderBones.push(tBone);
+// //                 })
+// // console.log(newOrderBones);
+// //
+// //                 model7Sins.children[0].skeleton.bones = newOrderBones;
+//
+//                 // model7Sins.children[0].bind(model7Sins.children[0].skeleton);
+//
+//
+//                     refModel.position.x = -1.5;
+//                 model7Sins.position.x = -1;
+//                 model7Sins.position.z += 0.1;
+//
+//
+//                 //Set new Bone order and anim flag
+//                 // {
+//                 //     model7Sins.children[0].skeleton.bones.sort((a, b) => {
+//                 //
+//                 //         if (a.userData.boneIndex === b.userData.boneIndex)
+//                 //             return 0;
+//                 //
+//                 //         return a.userData.boneIndex < b.userData.boneIndex ? -1 : 1;
+//                 //     });
+//                 //
+//                 //     model7Sins.children[0].children[0].remove()
+//                 //     const n = new Skeleton(model7Sins.children[0].skeleton.bones);
+//                 //     model7Sins.children[0].add(n.bones[0]);
+//                 //     model7Sins.children[0].bind(n);
+//                 //
+//                 // }
+//
+//
+//
+//                 // var a = SkeletonHelper.getBonePositionRelativeToRoot(refModel.children[0].skeleton.getBoneByName('bone_1045'), model7Sins.children[0].skeleton.getBoneByName('bone_29'))
+//                 // var b = SkeletonHelper.getBonePositionRelativeToRoot(refModel.children[0].skeleton.getBoneByName('bone_1002'), model7Sins.children[0].skeleton.getBoneByName('bone_31'))
+// // console.log(a, b);die;
+//
+//
+//                 // SkeletonHelper.nameBonesBasedOnLocalPosition(refModel.children[0].skeleton.bones, model7Sins.children[0].skeleton.bones);
+//                 // console.log(refModel.children[0].skeleton);
+//                 // console.log(model7Sins.children[0].skeleton);
+//                 // die;
+//
+//
+//
+//                 const tmpSin2Mh = {
+//                     bone_3: 'bone_1094',
+//                     bone_4: 'bone_1095',
+//                     //missed
+//                     bone_6: 'bone_1003',
+//                     bone_7: '0',
+//                     bone_8: 'bone_6666',
+//                     //missed
+//                     bone_9: 'bone_1039',
+//                     bone_10: 'bone_1020',
+//                     bone_11: 'bone_1021',
+//                     bone_12: 'bone_1004',
+//                     bone_13: 'bone_1006',
+//                     bone_14: 'bone_1005',
+//                     //missed
+//                     bone_16: 'bone_1011',
+//                     bone_17: 'bone_1008',
+//                     bone_18: 'bone_1013',
+//                     bone_19: 'bone_1057',
+//                     bone_20: 'bone_1093',
+//                     bone_21: 'bone_1074',
+//                     bone_22: 'bone_1075',
+//                     bone_23: 'bone_1058',
+//                     bone_24: 'bone_1060',
+//                     bone_25: 'bone_1059',
+//                     bone_26: 'bone_1065',
+//                     bone_27: 'bone_1062',
+//
+//                     bone_28: 'bone_1096',
+//                     bone_29: 'bone_1045',
+//                     bone_30: 'bone_1023',
+//                     bone_31: 'bone_1002',
+//                     bone_32: 'bone_1019',
+//                     bone_33: 'bone_1024',
+//                     bone_34: 'bone_1077',
+//                     bone_35: 'bone_1056',
+//                     bone_36: 'bone_1073'
+//                 }
+//
+//                 for (let a in tmpSin2Mh){
+//
+//                     const sBone = refModel.children[0].skeleton.getBoneByName(tmpSin2Mh[a]);
+//                     const tBone = model7Sins.children[0].skeleton.getBoneByName(a);
+//
+//                     tBone.name = sBone.name;
+//                     tBone.userData.name = sBone.userData.name;
+//                     tBone.userData.boneId = sBone.userData.boneId;
+//
+//                     // SkeletonHelper.setBoneColorByBoneName(tmpSin2Mh[a], refModel.children[0], new Color(0xff0000))
+//                     // SkeletonHelper.setBoneColorByBoneName(a, model7Sins.children[0], new Color(0xff0000))
+//
+//                 }
+//
+//                 const root = model7Sins.children[0].skeleton.getBoneByName('bone_0');
+//                 root.name = "0";
+//                 root.userData.name = "0";
+//                 root.userData.boneId = -1;
+//
+//                 const bip1 = model7Sins.children[0].skeleton.getBoneByName('bone_1');
+//                 bip1.name = "Bip01";
+//                 bip1.userData.name = "Bip01";
+//                 bip1.userData.boneId = 1000;
+//
+//                 // SkeletonHelper.applyBoneOrderFrom(refModel.children[0].skeleton.bones, model7Sins.children[0].skeleton.bones);
+//
+//                 // SkeletonHelper.setBoneColorByBoneName('bone_3333', refModel.children[0], new Color(0xff0000))
+//                 // SkeletonHelper.setBoneColorByBoneName('bone_6666', refModel.children[0], new Color(0xff0000))
+//                 // SkeletonHelper.setBoneColorByBoneName('bone_8', model7Sins.children[0], new Color(0xff0000))
+//
+//                 //
+//
+//
+//
+//
+//                 helperPlayAnimation(model7Sins, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+//
+//                 //
+//                 console.log(logSkeletonHierarchy(refModel.children[0].skeleton));
+//                 console.log(logSkeletonHierarchy(model7Sins.children[0].skeleton));
+//             }
+
+            WebGl.orbit();
+        </script>
+
+    </body>
+</html>

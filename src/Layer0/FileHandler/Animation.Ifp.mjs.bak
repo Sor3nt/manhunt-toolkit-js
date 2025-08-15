@@ -1,0 +1,695 @@
+import FileHandlerAbstract from "./FileHandler.Abstract.mjs";
+import Database from "../Database.mjs";
+import Result from "../Result.mjs";
+import MimeType from "../MimeType.mjs";
+import {AnimationClip, Quaternion, Vector3} from "../../Vendor/three.module.mjs";
+import helper from "../../Helper.mjs";
+
+class AnimationIfp extends FileHandlerAbstract{
+    tag = "IFP";
+
+    FOURCC_ANPK = 1263554113;
+    FOURCC_ANCT = 1413697089;
+
+    /**
+     * @param binary {NBinary}
+     * @returns {boolean}
+     */
+    canHandle(binary){
+        if (binary.remain() < 4) return false;
+        let fourCC = this.getFourCC(binary);
+
+        //ANPK | ANCT
+        return (fourCC === this.FOURCC_ANPK || fourCC === this.FOURCC_ANCT);
+    }
+    
+    process(binary, infos) {
+        let results = [];
+        let fourCC = this.getFourCC(binary);
+        binary.seek(4); //skip fourCC
+
+        let IFPEntryArray = [];
+        let IFPEntryIndexArray = [];
+
+        switch (fourCC) {
+
+            case this.FOURCC_ANCT:
+                let numBlock = binary.int32();
+
+                for (let i = 0; i < numBlock; i++) {
+                    binary.seek(4);
+                    let bNameLen = binary.int32();
+                    let blockName = binary.consume(bNameLen, 'nbinary').getString(0);
+                    let ANPK = this.readANPKIndex(binary);
+
+                    ANPK.anpkName.forEach((name, index) => {
+                        Database.add(
+                            new Result(MimeType.ANIMATION, this, binary, name, ANPK.anpkOffset[index], 0, {...{
+                                name,
+                                blockName
+                            }, ...infos}, infos.path)
+                        );
+                    });
+
+                }
+                break;
+
+            case this.FOURCC_ANPK:
+                let result = this.readStrmAnimBinIndex(binary);
+                IFPEntryArray = result[0];
+                IFPEntryIndexArray = result[1];
+
+                IFPEntryIndexArray.forEach((ANPK) => {
+                    ANPK.anpkName.forEach((name, index) => {
+
+                        Database.add(
+                            new Result(MimeType.ANIMATION, this, binary, name, ANPK.anpkOffset[index], 0, {
+                                groupName: IFPEntryArray[index],
+                                name
+                            }, infos.path)
+                        );
+
+                    });
+                });
+
+                break;
+
+        }
+
+        return results;
+    }
+
+    async decode(binary, options = {}, props = {}) {
+        const clipInfo = this.getANPKAnim({...options, ...props}, binary);
+        // const clipInfo = this.getANPKAnim(options.convert || false, options.game || 'mh2', options.platform || "pc", binary);
+        clipInfo.name = props.name;
+
+        return AnimationClip.parse( clipInfo );
+    }
+
+
+    getFourCC(binary){
+        let current = binary.current();
+        let fourCC = binary.uInt32();
+
+        //strmanim_pc.bin
+        if (fourCC === 1 && binary.remain() > 2048){
+            binary.seek(2044);
+            fourCC = binary.uInt32();
+        }
+
+        binary.setCurrent(current);
+        return fourCC;
+    }
+
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @return {{frameTimeCount: *[], anpkName: *[], anpkOffset: *[]}}
+     */
+    readANPKIndex(binary) {
+
+        binary.seek(4); //anpk_magic
+        let numANPK = binary.int32();
+        let ANPK = {
+            anpkName: [],
+            anpkOffset: [],
+            frameTimeCount: [],
+        };
+
+        for (let j = 0; j < numANPK; j++) {
+            binary.seek(4); //NAME_magic
+            let AnimNameLen = binary.int32();
+            let AnimName = binary.consume(AnimNameLen, 'nbinary').getString(0);
+
+            ANPK.anpkOffset.push(binary.current());
+            ANPK.anpkName.push(AnimName);
+
+            let numBones = binary.int32();
+            let chunkSize = binary.int32();
+
+            let testVersion = binary.consume(4, 'string');
+            binary.setCurrent( binary.current() - 4);
+
+            let times = 10;
+            let ANPKType;
+            let mh064Patch = false;
+            if (testVersion === "SEQT" || testVersion === "SEQU"){
+                ANPKType = testVersion;
+                mh064Patch = true;
+            }else{
+                times = binary.consume(4, 'float32');
+                ANPKType = binary.consume(4, 'string');
+            }
+
+            ANPK.frameTimeCount.push(times);
+
+            binary.seek(-4);
+
+            let patchOffset = 0;
+            if (mh064Patch)
+                patchOffset = 4; //we have no frameTimeCount field
+
+
+            if (ANPKType === "SEQT") {
+                binary.setCurrent(binary.current() + (chunkSize + numBones * 13) + patchOffset);
+            } else if (ANPKType === "SEQU") {
+                binary.setCurrent(binary.current() + (chunkSize + numBones * 9) + patchOffset);
+            }else{
+                helper.log(this.tag, `Parsing error, assume SEQT or SEQU got ${ANPKType}`, 'error');
+            }
+
+            binary.seek(4); //unk
+            binary.seek(4); //pecTime
+            let perEntrySize = binary.int32();
+            let numEntry = binary.uInt32();
+            let pecSize = perEntrySize * numEntry;
+
+            binary.setCurrent(binary.current() + pecSize);
+        }
+
+        return ANPK;
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @return {*[][]}
+     */
+    readStrmAnimBinIndex(binary) {
+        let IFPEntryArray = [];
+        let IFPEntryIndexArray = [];
+        let i, ANPK, nextOffset;
+
+        let numExec = binary.uInt32();
+        let numEnvExec = binary.uInt32();
+        for (i = 0; i < numExec; i++) {
+            ANPK = {
+                anpkName: [],
+                anpkOffset: []
+            };
+
+            let tempAnpk = [];
+
+            IFPEntryArray.push(
+                "Execution" + binary.uInt32()
+            );
+
+            let JumpExecutionOffset = binary.uInt32();
+            binary.seek(4); //JumpExecutionSize
+            let WhileLevelExecOffset = binary.uInt32();
+            binary.seek(4); //WhileLevelExecSize
+            let YellowLevelExecOffset = binary.uInt32();
+            binary.seek(4); //YellowLevelExecSize
+            let RedLevelExecOffset = binary.uInt32();
+            binary.seek(4); //RedLevelExecSize
+            nextOffset = binary.current();
+
+            if (JumpExecutionOffset > 0) {
+                binary.setCurrent(JumpExecutionOffset);
+                tempAnpk.push(this.readANPKIndex(binary));
+            }
+
+            if (WhileLevelExecOffset > 0) {
+                binary.setCurrent(WhileLevelExecOffset);
+                tempAnpk.push(this.readANPKIndex(binary));
+            }
+
+            if (YellowLevelExecOffset > 0) {
+                binary.setCurrent(YellowLevelExecOffset);
+                tempAnpk.push(this.readANPKIndex(binary));
+            }
+
+            if (RedLevelExecOffset > 0) {
+                binary.setCurrent(RedLevelExecOffset);
+                tempAnpk.push(this.readANPKIndex(binary));
+            }
+
+            for (let j = 0; j < tempAnpk.length; j++) {
+                for (let jj = 0; jj < tempAnpk[j].anpkName.length; jj++) {
+                    ANPK.anpkName.push(tempAnpk[j].anpkName[jj]);
+                    ANPK.anpkOffset.push(tempAnpk[j].anpkOffset[jj]);
+                }
+            }
+
+            binary.setCurrent(nextOffset);
+
+            IFPEntryIndexArray.push(ANPK);
+        }
+
+        for (i = 0; i < numEnvExec; i++) {
+
+            let ExecutionID = binary.uInt32();
+            let EnvExecOffset = binary.uInt32();
+            binary.seek(4); //EnvExecSize
+
+            nextOffset = binary.current();
+            IFPEntryArray.push(
+                "Environmental Exec" + ExecutionID
+            );
+
+            if (EnvExecOffset > 0) {
+                binary.setCurrent(EnvExecOffset);
+                ANPK = this.readANPKIndex(binary);
+                IFPEntryIndexArray.push(ANPK);
+
+                binary.setCurrent(nextOffset);
+            }
+
+        }
+
+        return [IFPEntryArray, IFPEntryIndexArray];
+    }
+
+    /**
+     *
+     * @param {{blockName: string, name: string, path: string, source: { game: string, platform: string, version: string, isCutscene: boolean } }} options
+     * @param binary
+     * @return {{duration, name: string, tracks: *[]}}
+     */
+    getANPKAnim(options, binary) {
+
+        let resultBones = [];
+
+        let numBones = binary.int32();
+        binary.seek(4); //chunkSize
+
+        let testVersion = binary.consume(4, 'string');
+        binary.setCurrent( binary.current() - 4);
+
+        let times = false;
+        if (testVersion === "SEQT" || testVersion === "SEQU"){
+        }else{
+            times = binary.consume(4, 'float32');
+        }
+
+        for (let b = 0; b < numBones; b++) {
+
+            let ANPKType = binary.consume(4, 'string');
+
+            let boneId = binary.consume(2, 'int16');
+            let frameType = binary.consume(1, 'int8');
+            let frames = binary.consume(2, 'uint16');
+
+            let frameTime = 0.0;
+            let startTime = (binary.consume(2, 'int16')) / 2048.0 * 30.0;
+
+
+            let resultBone = {
+                'boneId' : boneId,
+                'frameType' : frameType,
+                'startTime' : startTime,
+                'frames' : [],
+                'direction': []
+            };
+
+
+            if (frameType > 2) {
+                //rX rY rZ rW quat
+                resultBone.direction = [
+                    binary.consume(2, 'int16') / 2048.0,
+                    binary.consume(2, 'int16') / 2048.0,
+                    binary.consume(2, 'int16') / 2048.0,
+                    binary.consume(2, 'int16') / 2048.0,
+                ];
+
+            }else if(startTime === 0){
+                //back to start time
+                binary.setCurrent(binary.current() - 2);
+            }
+
+            let resultFrames = { frames: [] };
+            let resultFrame;
+            for (let i = 0; i < frames; i++) {
+                resultFrame = {
+                    time: 0,
+                    quat: [],
+                    position: [],
+                };
+
+                let currentTime;
+
+                if (startTime === 0) {
+
+                    if (frameType === 3 && i === 0) {
+                        currentTime = 0.0;
+                    } else {
+                        currentTime = binary.consume(2, 'uint16') / 2048.0 * 30.0;
+                    }
+
+                    frameTime += currentTime;
+                } else {
+                    if (startTime < 1) startTime = 1;
+
+                    if ((frames === 0) && (startTime === (times*30))){
+                        frameTime = (i) + startTime;
+                    }else{
+                        frameTime = (i) + startTime - 1
+                    }
+                }
+
+                resultFrame.time =  frameTime;
+
+                if (frameType < 3) {
+                    //rX rY rZ rW quat
+                    resultFrame.quat = [
+                        binary.consume(2, 'int16') / 4096.0,
+                        binary.consume(2, 'int16') / 4096.0,
+                        binary.consume(2, 'int16') / 4096.0,
+                        binary.consume(2, 'int16') / 4096.0,
+                    ];
+
+                }
+
+                if (frameType > 1) {
+
+                    let factor = 2048;
+                    if (options.source.isCutscene) factor = 1024.0;
+
+                    //tX tY tZ
+                    resultFrame.position = [
+                        binary.consume(2, 'int16') / factor,
+                        binary.consume(2, 'int16') / factor,
+                        binary.consume(2, 'int16') / factor,
+                    ];
+                }
+
+                resultFrames.frames.push(resultFrame);
+            }
+
+            //fix for the ps2 0.64, they don't use a time value
+            if (times === false){
+                times = resultFrames.frames[resultFrames.frames.length - 1].time / 30;
+            }
+
+            //fix for three.js, we need the last frame
+            if (frameTime < times * 30){
+                resultFrames.frames[resultFrames.frames.length - 1].time = times * 30;
+            }
+
+            if (ANPKType === "SEQT") {
+                resultFrames.lastFrameTime = binary.consume(4, 'float32');
+            }
+
+            resultBone.frames.push(resultFrames);
+            resultBones.push(resultBone);
+        }
+
+        return this.convertBonesToAnimation(options, resultBones, times);
+    }
+
+    getBoneNameByBoneId(game, boneId) {
+
+        let mappingManhunt = {
+            'Bip01': 1000,
+            'Bip01 Head': 1001,
+            'Bip01 L Calf': 1002,
+            'Bip01 L Clavicle': 1003,
+            'Bip01 L Finger0': 1004,
+            'Bip01 L Finger1': 1005,
+            'Bip01 L Finger01': 1006,
+            'Bip01 L Finger2': 1008,
+            'Bip01 L Finger3': 1009,
+            'Bip01 L Finger11': 1011,
+            'Bip01 L Finger21': 1013,
+            'Bip01 L Finger31': 1015,
+            'Bip01 L Foot': 1019,
+            'Bip01 L Forearm': 1020,
+            'Bip01 L Hand': 1021,
+            'Bip01 L Thigh': 1023,
+            'Bip01 L Toe0': 1024,
+            'Bip01 L UpperArm': 1039,
+            'Bip01 Neck': 1040,
+            'Bip01 Pelvis': 1045,
+            'Bip01 R Calf': 1056,
+            'Bip01 R Clavicle': 1057,
+            'Bip01 R Finger0': 1058,
+            'Bip01 R Finger1': 1059,
+            'Bip01 R Finger01': 1060,
+            'Bip01 R Finger2': 1062,
+            'Bip01 R Finger3': 1063,
+            'Bip01 R Finger11': 1065,
+            'Bip01 R Finger21': 1067,
+            'Bip01 R Finger31': 1069,
+            'Bip01 R Foot': 1073,
+            'Bip01 R Forearm': 1074,
+            'Bip01 R Hand': 1075,
+            'Bip01 R Thigh': 1077,
+            'Bip01 R Toe0': 1078,
+            'Bip01 R UpperArm': 1093,
+            'Bip01 Spine': 1094,
+            'Bip01 Spine1': 1095,
+            'Bip01 Spine2': 1096,
+            'Arm Comp Bone 1': 2003,
+            'Arm Comp Bone 2': 2222,
+            'Back Weapon Slot': 3333,
+            'Left Weapon Slot': 4444,
+            'Right Weapon Slot': 5555,
+            'Lure Slot': 6666,
+            'Strap Bone 1': 7777,
+            'Strap Bone 2': 8888,
+            'Neck Compensator': 9999,
+            'Player_Bod': 10000,
+            'Bip01 HeadNub': 10001,
+            'Neck Compensator Dummy': 10002,
+            'Bip01 L Finger0Nub': 10003,
+            'Bip01 L Finger1Nub': 10004,
+            'Bip01 L Finger2Nub': 10005,
+            'Bip01 L Finger3Nub': 10006,
+            'Arm Comp Bone 2 Dummy': 10007,
+            'Bip01 R Finger0Nub': 10008,
+            'Bip01 R Finger1Nub': 10009,
+            'Bip01 R Finger2Nub': 10010,
+            'Bip01 R Finger3Nub': 10011,
+            'Arm Comp Bone 1 Dummy': 10012,
+            'Strap Bone 1 Dummy': 10013,
+            'Strap Bone 2 Dummy': 10014,
+            'Bip01 L Toe0Nub': 10015,
+            'Bip01 R Toe0Nub': 10016
+        };
+
+        let mappingManhunt2 = {
+            BONE_JAW: 0,
+            BONE_LEFT_BROW: 1,
+            BONE_LIP_CORNER_R: 2,
+            BONE_LIP_CORNER_L: 3,
+            BONE_RIGHT_BROW: 4,
+            BONE_ROOT: 5,
+            Bip01: 1000,
+            Bip01_Head: 1001,
+            Bip01_L_Calf: 1002,
+            Bip01_L_Clavicle: 1003,
+            Bip01_L_Finger0: 1004,
+            Bip01_L_Finger1: 1005,
+            Bip01_L_Finger01: 1006,
+            Bip01_L_Finger2: 1008,
+            Bip01_L_Finger11: 1011,
+            Bip01_L_Finger21: 1013,
+            Bip01_L_Foot: 1019,
+            Bip01_L_Forearm: 1020,
+            Bip01_L_Hand: 1021,
+            Bip01_L_Thigh: 1023,
+            Bip01_L_Toe0: 1024,
+            Bip01_L_UpperArm: 1039,
+            Bip01_Neck: 1040,
+            Bip01_Pelvis: 1045,
+            Bip01_R_Calf: 1056,
+            Bip01_R_Clavicle: 1057,
+            Bip01_R_Finger0: 1058,
+            Bip01_R_Finger1: 1059,
+            Bip01_R_Finger01: 1060,
+            Bip01_R_Finger2: 1062,
+            Bip01_R_Finger11: 1065,
+            Bip01_R_Finger21: 1067,
+            Bip01_R_Foot: 1073,
+            Bip01_R_Forearm: 1074,
+            Bip01_R_Hand: 1075,
+            Bip01_R_Thigh: 1077,
+            Bip01_R_Toe0: 1078,
+            Bip01_R_UpperArm: 1093,
+            Bip01_Spine: 1094,
+            Bip01_Spine1: 1095,
+            Bip01_Spine2: 1096,
+            Back_Weapon_Slot: 3333,
+            Left_Weapon_Slot: 4444,
+            Right_Weapon_Slot: 5555,
+            Lure_Slot: 6666,
+            STRAP1: 7777,
+            STRAP2: 8888
+        };
+
+        if (game === "mh2"){
+            for(let i in mappingManhunt2){
+                if (!mappingManhunt2.hasOwnProperty(i)) continue;
+                if (mappingManhunt2[i] === boneId) return i;
+            }
+
+        }else{
+            for(let i in mappingManhunt){
+                if (!mappingManhunt.hasOwnProperty(i)) continue;
+                if (mappingManhunt[i] === boneId) return i;
+            }
+
+        }
+
+        helper.log(this.tag, `Unable to map boneId ${boneId}!`, 'warn');
+
+        return boneId;
+    }
+
+    convertBonesToAnimation(options, bones, duration) {
+
+        let animation = {
+            name: "noname",
+            duration: duration,
+            tracks: []
+        };
+
+        for(let i in bones){
+            if (!bones.hasOwnProperty(i)) continue;
+
+            let bone = bones[i];
+            let name;
+
+            // if (options.convert){
+            //     let convertToGame = options.source.game === "mh1" ? "mh2" : "mh1";
+            //
+            //     helper.log(this.tag, `Convert Animation to ${convertToGame}`, 'info');
+            //     name = this.getBoneNameByBoneId(convertToGame, bone.boneId);
+            //
+            // }else{
+                name = this.getBoneNameByBoneId('mh2', bone.boneId);
+
+                if (name === bone.boneId){
+                    console.warn(`Remove BoneId ${bone.boneId} animation, unknown BoneName`);
+                    continue;
+                }
+            // }
+
+            let trackPosition = {
+                name: name + '.position',
+                times: [],
+                values: [],
+                type: "vector"
+            };
+
+            let trackQuaternion = {
+                name: name + '.quaternion',
+                times: [],
+                values: [],
+                type: "quaternion"
+            };
+
+            bone.frames[0].frames.forEach(function (frame) {
+                // if (i > 0) return;
+
+                if (frame.quat.length > 0){
+                    trackQuaternion.times.push(frame.time / 30);
+
+                    let vec4 = new Quaternion(
+                        frame.quat[0] * -1,
+                        frame.quat[1] * -1,
+                        frame.quat[2] * -1,
+                        frame.quat[3]
+                    );
+
+                    if (options.source.game === "mh1"){
+                        if (name === "Bip01_Spine"){
+                            //
+                            const pcLeoSpine = (new Quaternion()).fromArray([-0.5001996803874776,-0.4998016250932634,0.49980025474368456,0.50019832492129])
+                            const psp001CutsceneLeoSpine = (new Quaternion()).fromArray([-0.0000021622299451319333,0.0007676188871754702,5.45716823897964e-7,0.9999997053780922])
+                            const inversePcLeoSpine = pcLeoSpine.clone().inverse(); // Invers von pcLeoSpine
+                            const difference = inversePcLeoSpine.multiply(psp001CutsceneLeoSpine); // Differenz berechnen
+
+                            vec4.multiply(difference.inverse());
+
+                        }
+                        if (name === "Bip01_L_Calf"){
+                            //
+                            const pcLeoSpine = (new Quaternion()).fromArray([2.440511266561664e-9,-0.05647930062152587,-1.0401639453556406e-8,0.9984037703260655])
+                            const psp001CutsceneLeoSpine = (new Quaternion()).fromArray([2.130436925236926e-9,-0.056479296925910624,3.884221964789274e-8,0.9984037705351243])
+                            const inversePcLeoSpine = pcLeoSpine.clone().inverse(); // Invers von pcLeoSpine
+                            const difference = inversePcLeoSpine.multiply(psp001CutsceneLeoSpine); // Differenz berechnen
+
+                            vec4.multiply(difference);
+                        }
+                        if (name === "Bip01_R_Calf"){
+                            //
+                            const pcLeoSpine = (new Quaternion()).fromArray([-7.636999760662685e-10,-0.056479308012756246,2.1800237624757115e-8,0.9984037699079464])
+                            const psp001CutsceneLeoSpine = (new Quaternion()).fromArray([1.0482701732200531e-9,-0.056479289534680226,2.718944096411589e-8,0.9984037709532436])
+                            const inversePcLeoSpine = pcLeoSpine.clone().inverse(); // Invers von pcLeoSpine
+                            const difference = inversePcLeoSpine.multiply(psp001CutsceneLeoSpine); // Differenz berechnen
+
+                            vec4.multiply(difference);
+                        }
+
+                        if (name === "Bip01_L_Clavicle"){
+
+                            const pcLeoSpine = (new Quaternion()).fromArray([0.6644043958132367,0.7473731600021396,0.00026557692434642195,0.0002966502190066807])
+                            const psp001CutsceneLeoSpine = (new Quaternion()).fromArray([0.7071067040633977,0.7071067462102477,0.0002825215808114726,0.0002805603670157886])
+                            const inversePcLeoSpine = pcLeoSpine.clone().inverse(); // Invers von pcLeoSpine
+                            const difference = inversePcLeoSpine.multiply(psp001CutsceneLeoSpine); // Differenz berechnen
+                            vec4.multiply(difference.inverse()); // vec4 = vec4 * difference
+                        }
+                        if (name === "Bip01_R_Clavicle"){
+
+                            const pcLeoSpine = (new Quaternion()).fromArray([-0.6644043958132414,0.7473731600021285,-0.0002635040100482386,0.000298493066947079])
+                            const psp001CutsceneLeoSpine = (new Quaternion()).fromArray([-0.7071067040633812,0.7071067462102477,-0.00028056034271610074,0.000282521615555144])
+                            const inversePcLeoSpine = pcLeoSpine.clone().inverse(); // Invers von pcLeoSpine
+                            const difference = inversePcLeoSpine.multiply(psp001CutsceneLeoSpine); // Differenz berechnen
+                            vec4.multiply(difference.inverse()); // vec4 = vec4 * difference
+                        }
+                    }
+
+                    trackQuaternion.values.push(
+                        vec4.x, vec4.y, vec4.z, vec4.w
+                    );
+                }
+
+                if (frame.position.length > 0){
+                    trackPosition.times.push(frame.time / 30);
+
+                    let vec3 = new Vector3(
+                        frame.position[0],
+                        frame.position[1],
+                        frame.position[2]
+                    );
+
+                    //
+                    // if (options.platform === "psp_001") {
+                    //     if (name === "Bip01_L_Clavicle") {
+                    //         vec3.add(new Vector3(0.170165, -2.68221e-07, 0.0150331));
+                    //     }
+                    //
+                    //     if (name === "Bip01_R_Clavicle") {
+                    //         vec3.add(new Vector3(0.170165, -2.75671e-07, 0.0150331));
+                    //     }
+                    // }
+
+                    if (options.source.platform === "psp" && options.source.isCutscene){
+                        vec3.x *= -1;
+                        vec3.z *= -1;
+                    }
+
+                    trackPosition.values.push(
+                        vec3.x, vec3.y, vec3.z
+                    );
+                }
+            });
+
+            if (trackPosition.values.length > 0){
+                animation.tracks.push(trackPosition);
+            }
+
+            if (trackQuaternion.values.length > 0)
+                animation.tracks.push(trackQuaternion);
+
+        }
+
+        return animation;
+    }
+
+}
+
+export default new AnimationIfp();

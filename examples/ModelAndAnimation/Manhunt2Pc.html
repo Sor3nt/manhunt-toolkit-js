@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhunt 2 - PC - Test</title>
+    <style>* { padding: 0; margin: 0;}</style>
+</head>
+<body>
+
+<div id="webgl" style="height: 100vh"></div>
+<div id="canvas"></div>
+
+<script type="module">
+
+    import Database from "/src/Layer0/Database.mjs";
+    import WebGl from "/src/Layer2/WebGl.mjs";
+    import MimeType from "/src/Layer0/MimeType.mjs";
+    import { AnimationMixer, SkeletonHelper } from "/src/Vendor/three.module.mjs";
+    import ResourceLoader from "/src/Layer1/ResourceLoader.mjs";
+    import ManhuntMatrix from "/src/Layer1/ManhuntMatrix.mjs";
+
+
+    const resLoader = new ResourceLoader();
+
+    //Load MH2 PC Model
+    await resLoader.load('/Unittest/Resources/modelspc.tex');
+    await resLoader.load('/Unittest/Resources/modelspc.mdl');
+
+    //Load MH1 PC Model
+    await resLoader.load('/Resources/Manhunt/pc/cash_pc.txd');
+    await resLoader.load('/Resources/Manhunt/pc/cash_pc.dff');
+
+
+    //Load PSP Model
+    await resLoader.load('/Unittest/Resources/MODELS.TXD');
+    await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+        platform: 'psp'
+    });
+
+    //Load PC Animation
+    await resLoader.load('/Resources/Manhunt2/pc/allanims_pc.ifp', {
+        source: {
+            game: "mh2",
+            platform: "pc"
+        }
+    });
+
+    /**
+     *
+     * @param {Group} model
+     * @param {AnimationClip} animationClip
+     * @param {Group} refModel
+     * @return {Promise<void>}
+     */
+    function helperPlayAnimation(model, animationClip, refModel = null){
+        const skeleton = model.children[0].skeleton;
+        WebGl.scene.add( model );
+        WebGl.scene.add( new SkeletonHelper( skeleton.bones[0] ) );
+
+        ManhuntMatrix.removeInvalidAnimationBonesBasedOnSkeleton(skeleton, animationClip);
+
+        //apply the refModel skeleton to the given model
+        if (refModel !== null)
+            ManhuntMatrix.correctBoneTransforms(refModel.children[0].skeleton, skeleton);
+
+        const mixer = new AnimationMixer(model.children[0]);
+        mixer.clipAction(animationClip).play()
+
+        WebGl.onRender((delta) => { mixer.update(delta);});
+    }
+
+    let sourceModel;
+    const animation = Database.findOneBy({ type: MimeType.ANIMATION, name: "BAT_IDLE_PISS_ANIM" });
+
+    //Create Manhunt 2 | PC Model and play Manhunt 2 | PC animation
+    {
+        const model = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        sourceModel = model;
+
+        helperPlayAnimation(model, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+    }
+
+    // Create Manhunt 1 | PC Model and play Manhunt 2 | PC animation
+    {
+        const model = await Database.findOneBy({ type: MimeType.MODEL, file: "cash_pc.dff"}).decode({
+            movePelvisToSpine: true,
+            moveThighToPelvis: true
+        });
+
+        model.position.x = 1;
+        helperPlayAnimation(model, await animation.decode({target: { game: "mh1", platform: "pc"}}), sourceModel);
+    }
+
+    //Create Manhunt 2 | PSP Model and play Manhunt 2 | PC animation
+    {
+        const model = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode({
+            movePelvisToSpine: true,
+        });
+        model.position.x = -1;
+
+        helperPlayAnimation(model, await animation.decode({target: { game: "mh2", platform: "psp", version: "001"}}), sourceModel);
+    }
+
+
+    WebGl.orbit();
+</script>
+
+</body>
+</html>

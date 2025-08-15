@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhunt</title>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div id="webgl" style="height: 100vh"></div>
+<div id="canvas"></div>
+
+<script type="module">
+
+    import Database from "./src/Layer0/Database.mjs";
+    import WebGl from "./src/Layer2/WebGl.mjs";
+    import MimeType from "./src/Layer0/MimeType.mjs";
+    import {AnimationMixer, BoxGeometry, Mesh, MeshBasicMaterial, SkeletonHelper,} from "./src/Vendor/three.module.mjs";
+    import ResourceLoader from "./src/Layer1/ResourceLoader.mjs";
+    import ManhuntMatrix from "./src/Layer1/ManhuntMatrix.mjs";
+
+    function exportBoneMatrices(bones){
+        let lines = {};
+        bones.forEach((bone) => {
+
+            lines[ManhuntMatrix.getBoneNameByBoneId(parseInt(bone.name.replace("bone_", '')))] = {
+                quaternion: bone.quaternion.toArray(),
+                position: bone.position.toArray()
+            };
+        });
+
+        console.log(lines);
+    }
+
+    const resLoader = new ResourceLoader();
+
+    async function testManhunt2PSP001CutseneAnimation(){
+        // await resLoader.load('/Resources/Manhunt2/psp_001/SCENE1.BSP');
+
+        await resLoader.load('/Unittest/Resources/modelspc.tex');
+        await resLoader.load('/Unittest/Resources/modelspc.mdl');
+
+        await resLoader.load('/Unittest/Resources/MODELS.TXD');
+        await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+            platform: 'psp'
+        });
+
+        await resLoader.load('/Unittest/Resources/ALLANIMS_cutscene.IFP', {
+            source: {
+                game: "mh2",
+                platform: "psp",
+                version: "001",
+                isCutscene: true
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION });
+            // const map = await Database.findOneBy({ type: MimeType.MAP }).decode();
+
+        let skel1;
+        let skel2;
+        let skelHelper1;
+        let skelHelper2;
+        {
+            const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+            // const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "DrWhyte_Cutscene" }).decode();
+            // exportBoneMatrices(model1.children[0].skeleton.bones);
+// die;
+
+            // WebGl.scene.add( map );
+            WebGl.scene.add( model1 );
+            // WebGl.scene.add( model2 );
+            skel1 = model1.children[0].skeleton;
+            skelHelper1 = new SkeletonHelper( model1.children[0].skeleton.bones[0] )
+            WebGl.scene.add( skelHelper1 );
+            // WebGl.scene.add( new SkeletonHelper( model2.children[0].skeleton.bones[0] ) );
+
+            const mixer1 = new AnimationMixer(model1.children[0]);
+            // const mixer2 = new AnimationMixer(model2.children[0]);
+            mixer1.clipAction(await animation[0].decode({
+                target: {
+                    game: "mh2",
+                    platform: "psp",
+                    version: "001"
+                }
+            })).play()
+            // mixer2.clipAction(await animation[2].decode({
+            //     target: {
+            //         game: "mh2",
+            //         platform: "psp",
+            //         version: "001"
+            //     }
+            // })).play()
+
+            // mixer1.update(0);
+            // mixer2.update(0);
+            WebGl.onRender((delta) => {
+                mixer1.update(delta);
+                // mixer2.update(delta);
+            });
+        }
+
+        {
+            const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+            // const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+
+            // model1.position.x = 1;
+            // model2.position.x = 2;
+
+            // WebGl.scene.add( map );
+            WebGl.scene.add( model1 );
+            // WebGl.scene.add( model2 );
+
+            skel2 = model1.children[0].skeleton;
+            skelHelper2 = new SkeletonHelper( model1.children[0].skeleton.bones[0] )
+            WebGl.scene.add( skelHelper2 );
+            // WebGl.scene.add( new SkeletonHelper( model2.children[0].skeleton.bones[0] ) );
+
+
+            const mixer1 = new AnimationMixer(model1.children[0]);
+            // const mixer2 = new AnimationMixer(model2.children[0]);
+            console.log(await animation[0].decode());
+            mixer1.clipAction(await animation[0].decode()).play()
+            // mixer2.clipAction(await animation[2].decode()).play()
+
+            // mixer1.update(0);
+            // mixer2.update(0);
+            WebGl.onRender((delta) => {
+                mixer1.update(delta);
+                // mixer2.update(delta);
+            });
+        }
+
+
+
+    }
+
+    async function testPSPAnimWithPCModel(){
+        await resLoader.load('/Unittest/Resources/modelspc.tex');
+        await resLoader.load('/Unittest/Resources/modelspc.mdl');
+
+        await resLoader.load('/Unittest/Resources/MODELS.TXD');
+        await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+            platform: 'psp'
+        });
+
+        await resLoader.load('/Unittest/Resources/ALLANIMS_cutscene.IFP', {
+            source: {
+                game: "mh2",
+                platform: "psp",
+                version: "001",
+                isCutscene: true
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+
+        WebGl.scene.add( model1 );
+        WebGl.scene.add( model2 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        const mixer2 = new AnimationMixer(model2.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+        mixer2.clipAction(await animation[2].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+            mixer2.update(delta);
+        });
+
+        const model3 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        model3.position.x -= 1.0;
+        WebGl.scene.add( model3 );
+
+    }
+
+    async function testPCAnimWithPCModel(){
+        await resLoader.load('/Unittest/Resources/modelspc.tex');
+        await resLoader.load('/Unittest/Resources/modelspc.mdl');
+
+        await resLoader.load('/Unittest/Resources/strmanim_pc.bin', {
+            source: {
+                game: "mh2",
+                platform: "pc"
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        });
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+    }
+
+    async function testPCAnimWithPSPModel(){
+
+        await resLoader.load('/Unittest/Resources/MODELS.TXD');
+        await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+            platform: 'psp'
+        });
+
+        await resLoader.load('/Unittest/Resources/strmanim_pc.bin', {
+            source: {
+                game: "mh2",
+                platform: "pc"
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        });
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+    }
+
+    async function testMhPCAnimWithPSPModel(){
+
+        await resLoader.load('/Unittest/Resources/MODELS.TXD');
+        await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+            platform: 'psp'
+        });
+
+        await resLoader.load('/Unittest/Resources/mh1_pc_allanims.ifp', {
+            source: {
+                game: "mh1",
+                platform: "pc"
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION, name: "Wire_Sneak_Attack2" });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        })
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+    }
+
+    async function testManhuntPcAnimation(){
+
+        await resLoader.load('/Resources/Manhunt2/psp_001/CutScene_MODELS.TXD');
+        await resLoader.load('/Resources/Manhunt2/psp_001/CutScene_MODELS.DFF', {
+            platform: 'psp'
+        });
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.tex');
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.mdl');
+        await resLoader.load('/Resources/Manhunt/pc/modelspc.txd');
+        await resLoader.load('/Resources/Manhunt/pc/modelspc.dff');
+
+        await resLoader.load('/Resources/Manhunt/pc/allanims.ifp', {
+            source: {
+                game: "mh1",
+                platform: "pc"
+            }
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION, name: "Wire_Sneak_Attack3" });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        });
+
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+        const mixer2 = new AnimationMixer(model2.children[0]);
+        mixer2.clipAction(await animation[0].decode({
+            target: {
+                game: 'mh1',
+                platform: 'pc'
+            }
+        })).play()
+
+        WebGl.onRender((delta) => {
+            mixer2.update(delta);
+        });
+
+        const model3 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        model3.position.x += 1.0;
+
+        // model3.children);
+        WebGl.scene.add( model3 );
+
+        const mixer3 = new AnimationMixer(model3.children[0]);
+        mixer3.clipAction(await animation[0].decode({
+            target: {
+                game: 'mh2',
+                platform: 'psp',
+                version: '001'
+            }
+
+        })).play();
+
+        WebGl.onRender((delta) => {
+            mixer3.update(delta);
+        });
+    }
+
+    async function testMhPCAnimWithMhPcModel(){
+
+        await resLoader.load('/Unittest/Resources/mh1_modelspc.txd');
+        await resLoader.load('/Unittest/Resources/mh1_modelspc.dff');
+
+        await resLoader.load('/Unittest/Resources/mh1_pc_allanims.ifp', {
+            source: {
+                game: "mh1",
+                platform: "pc",
+            },
+            convert:true
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION, name: "Wire_Sneak_Attack2" });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        });
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+    }
+
+    async function testPSPAnimWithMhPcModel(){
+
+        await resLoader.load('/Unittest/Resources/mh1_modelspc.txd');
+        await resLoader.load('/Unittest/Resources/mh1_modelspc.dff');
+
+        await resLoader.load('/Unittest/Resources/ALLANIMS_cutscene.IFP', {
+            source: {
+                game: "mh2",
+                platform: "psp",
+                version: "001",
+                isCutscene: true
+            },
+        });
+
+        const animation = Database.findBy({ type: MimeType.ANIMATION });
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+
+        WebGl.scene.add( model1 );
+
+        const mixer1 = new AnimationMixer(model1.children[0]);
+        mixer1.clipAction(await animation[0].decode()).play()
+
+        WebGl.onRender((delta) => {
+            mixer1.update(delta);
+        });
+
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+        model2.position.x -= 1.0;
+        WebGl.scene.add( model2 );
+
+    }
+
+    async function compareManhuntPcModelWithManhunt2PcModel(){
+        await resLoader.load('/Resources/Manhunt/pc/modelspc.txd');
+        await resLoader.load('/Resources/Manhunt/pc/modelspc.dff');
+
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.tex');
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.mdl');
+
+        const manhuntModel = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode();
+        const manhunt2Model = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        WebGl.scene.add( manhuntModel );
+        WebGl.scene.add( manhunt2Model );
+
+        exportBoneMatrices(manhuntModel.children[0].skeleton.bones)
+        exportBoneMatrices(manhunt2Model.children[0].skeleton.bones)
+
+    }
+
+    async function compareManhunt2PcModelWithManhunt2Psp001Model(){
+        await resLoader.load('/Resources/Manhunt2/psp_001/CutScene_MODELS.TXD');
+        await resLoader.load('/Resources/Manhunt2/psp_001/CutScene_MODELS.DFF', {
+            platform: 'psp'
+        });
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.tex');
+        await resLoader.load('/Resources/Manhunt2/pc/modelspc.mdl');
+
+        const manhunt2PspModel = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        const manhunt2Model = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode();
+        WebGl.scene.add( manhunt2PspModel );
+        WebGl.scene.add( manhunt2Model );
+
+        exportBoneMatrices(manhunt2PspModel.children[0].skeleton.bones)
+        exportBoneMatrices(manhunt2Model.children[0].skeleton.bones)
+
+    }
+
+
+
+    // testManhunt2PSP001CutseneAnimation();
+    // testPSPAnimWithPCModel();
+    // testPCAnimWithPCModel();
+    // testPCAnimWithPSPModel();
+    // testMhPCAnimWithPSPModel();
+    testManhuntPcAnimation();
+    // testMhPCAnimWithMhPcModel();
+    // testPSPAnimWithMhPcModel();
+
+    // compareManhuntPcModelWithManhunt2PcModel();
+    // compareManhunt2PcModelWithManhunt2Psp001Model();
+
+     WebGl.orbit();
+     //
+    //  await LevelLoader.load('jury_turf')
+    //
+    //
+    //  const _playerInst = Database.findOneBy({ type: MimeType.INST, name: 'player' });
+    //  const playerInst = await _playerInst.decode();
+    //  WebGl.camera.position.set(playerInst.position.x, playerInst.position.y + 2, playerInst.position.z);
+    //
+    // //
+    //
+    // const map = Database.findOneBy({ type: MimeType.MAP });
+    // WebGl.scene.add( await map.decode() );
+    //
+
+
+    // const test = Database.findOneBy({ type: MimeType.MODEL, name: "CJ_AMBULANCE" });
+    // console.log(await test.decode());
+    // die;
+    // console.log();
+    // console.log(await (await test.decode()).getModel());
+    // WebGl.scene.add( await test.decode() );
+    // const stl = STLExporter(WebGl.scene);
+    // console.log(stl);
+
+    // console.log(WebGl.scene);
+    //
+    // console.log(Database.findBy({}))
+
+     function showTexture(texture){
+         const geometry = new BoxGeometry();
+         const material = new MeshBasicMaterial({ map: texture });
+         const cube = new Mesh(geometry, material);
+         WebGl.scene.add(cube);
+
+     }
+
+</script>
+
+</body>
+</html>

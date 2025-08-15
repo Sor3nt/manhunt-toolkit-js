@@ -1,0 +1,96 @@
+<div class="card">
+    <div class="card-header">
+        Input
+    </div>
+    <div class="card-body text-center">
+
+        <div class="form-group row">
+
+            <label class="col-sm-4 col-form-label"  for="inputPlatform">Source</label>
+            <div class="col-sm-8">
+                <select class="form-control" id="inputPlatform">
+                    <option value="mh_pc" selected>Manhunt PC</option>
+                    <option value="mh2_pc">Manhunt 2 PC</option>
+                    <option value="mh2_psp">Manhunt 2 PSP</option>
+                    <option value="mh2_cutscene">Manhunt 2 PSP Cutscene</option>
+                    <option value="mh2_ps2">Manhunt 2 PS2</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" data-action="load">Load DFF/MDL File</button>
+
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Configuration
+    </div>
+    <div class="card-body">
+        <div class="form-group row">
+            <label class="col-sm-4 col-form-label" for="inputGame">Name</label>
+            <div class="col-sm-8">
+                <input class="form-control" id="modelName" type="text" />
+            </div>
+        </div>
+
+
+        <div class="form-group row">
+
+            <label class="col-sm-4 col-form-label" for="targetModel">Target Animation</label>
+            <div class="col-sm-8">
+                <select class="form-control" id="targetModel">
+<!--                    <option value="mh">Manhunt 1</option>-->
+                    <option value="mh2_pc" selected>Manhunt 2 PC</option>
+                    <option value="mh2_cutscene">Manhunt 2 PC (CutScene)</option>
+                </select>
+            </div>
+        </div>
+
+
+<!--        <div class="form-group">-->
+
+
+
+<!--            <div class="form-check">-->
+<!--                <input class="form-check-input" type="checkbox" id="applyMissedBones">-->
+<!--                <label class="form-check-label" for="applyMissedBones">-->
+<!--                    Add missed bones (by ref)-->
+<!--                </label>-->
+<!--            </div>-->
+
+<!--            <div class="form-check">-->
+<!--                <input class="form-check-input" type="checkbox" id="applyBoneHierarchy">-->
+<!--                <label class="form-check-label" for="applyBoneHierarchy">-->
+<!--                    Apply ref bone hierarchy-->
+<!--                </label>-->
+<!--            </div>-->
+
+<!--            <div class="form-check">-->
+<!--                <input class="form-check-input" type="checkbox" id="applyBonePosition">-->
+<!--                <label class="form-check-label" for="applyBonePosition">-->
+<!--                    Apply ref bone position-->
+<!--                </label>-->
+<!--            </div>-->
+
+
+<!--        </div>-->
+
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Output
+    </div>
+    <div class="card-body text-center">
+
+
+        <div class="text-center">
+
+            <button type="button" class="btn btn-primary" data-action="export">Export MDL</button>
+        </div>
+    </div>
+</div>
+

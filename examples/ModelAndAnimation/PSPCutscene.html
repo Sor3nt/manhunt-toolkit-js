@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhunt 2 - PSP - CutScene Test</title>
+    <style>* { padding: 0; margin: 0;}</style>
+</head>
+<body>
+
+<div id="webgl" style="height: 100vh"></div>
+<div id="canvas"></div>
+
+<script type="module">
+
+    import Database from "/src/Layer0/Database.mjs";
+    import WebGl from "/src/Layer2/WebGl.mjs";
+    import MimeType from "/src/Layer0/MimeType.mjs";
+    import { AnimationMixer } from "/src/Vendor/three.module.mjs";
+    import ResourceLoader from "/src/Layer1/ResourceLoader.mjs";
+    import ManhuntMatrix from "/src/Layer1/ManhuntMatrix.mjs";
+    import {SkeletonHelper} from "../../src/Vendor/three.module.mjs";
+
+
+
+    const resLoader = new ResourceLoader();
+
+    //Load MH2 PC Model
+    await resLoader.load('/Unittest/Resources/modelspc.tex');
+    await resLoader.load('/Unittest/Resources/modelspc.mdl');
+
+    //Load MH1 PC Model
+    await resLoader.load('/Resources/Manhunt/pc/modelspc.txd');
+    await resLoader.load('/Resources/Manhunt/pc/modelspc.dff');
+
+
+    //Load PSP Model
+    await resLoader.load('/Unittest/Resources/MODELS.TXD');
+    await resLoader.load('/Unittest/Resources/MODELS.DFF', {
+        platform: 'psp'
+    });
+
+    //Load PSP Animation
+    await resLoader.load('/Unittest/Resources/ALLANIMS_cutscene.IFP', {
+        source: {
+            game: "mh2",
+            platform: "psp",
+            version: "001",
+            isCutscene: true
+        }
+    });
+
+    /**
+     *
+     * @param {Group} model
+     * @param {AnimationClip} animationClip
+     * @return {Promise<void>}
+     */
+    function helperPlayAnimation(model, animationClip){
+        const skeleton = model.children[0].skeleton;
+        WebGl.scene.add( model );
+        WebGl.scene.add( new SkeletonHelper( skeleton.bones[0] ) );
+
+        ManhuntMatrix.removeInvalidAnimationBonesBasedOnSkeleton(skeleton, animationClip);
+
+        const mixer = new AnimationMixer(model.children[0]);
+        mixer.clipAction(animationClip).play()
+
+        WebGl.onRender((delta) => { mixer.update(delta);});
+    }
+
+    let mh2Leo;
+    let mhPspLeo;
+
+    //find all animation entries
+    const animation = Database.findBy({ type: MimeType.ANIMATION });
+
+    //Create Manhunt 2 | PSP 001 Cutscene Model and play 001 Cutscene animation
+    {
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Leo_Asylum_Cutscene" }).decode();
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "DrWhyte_Cutscene" }).decode();
+
+        mhPspLeo = model1;
+
+        const target = {target: { game: "mh2", platform: "psp", version: "001" }};
+        helperPlayAnimation(model1, await animation[0].decode(target));
+        helperPlayAnimation(model2, await animation[2].decode(target));
+    }
+
+    //Create Manhunt 2 | PC Model and play 001 Cutscene animation
+    {
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode({
+            applyBoneOrderFrom: mhPspLeo.children[0].skeleton.bones
+        });
+
+        // const a = model1.children[0].skeleton.bones.find((b) => b.userData.offset === 3093264);
+        // console.log(a);die;
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "leo_bodA" }).decode({
+            applyBoneOrderFrom: mhPspLeo.children[0].skeleton.bones
+        });
+
+        mh2Leo = model1;
+
+        model1.position.x = 2;
+        model2.position.x = 2;
+
+        helperPlayAnimation(model1, await animation[0].decode());
+        helperPlayAnimation(model2, await animation[2].decode());
+    }
+
+    //Create Manhunt 1 | PC Model and play 001 Cutscene animation
+    {
+        const model1 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode({
+            applyBoneOrderFrom: mhPspLeo.children[0].skeleton.bones,
+        });
+        const model2 = await Database.findOneBy({ type: MimeType.MODEL, name: "Smi_BodS1" }).decode({
+            applyBoneOrderFrom: mhPspLeo.children[0].skeleton.bones
+        });
+
+        model1.position.x = -2;
+        model2.position.x = -2;
+
+        helperPlayAnimation(model1, await animation[0].decode());
+        helperPlayAnimation(model2, await animation[2].decode());
+    }
+
+    WebGl.orbit();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+<div id="action">play</div>
+
+<script type="module">
+    import Rib from "./src/Layer0/FileHandler/Audio.Rib.mjs";
+    import Fsb from "./src/Layer0/FileHandler/Audio.Fsb.mjs";
+    import NBinary from "./src/Layer0/NBinary.mjs";
+    import AudioWav from "./src/Layer0/FileHandler/Audio.Wav.mjs";
+    import Database from "./src/Layer0/Database.mjs";
+    import MimeType from "./src/Layer0/MimeType.mjs";
+
+    // function buf2hex(buffer) {
+    //     return [...new Uint8Array(buffer)]
+    //         .map(x => x.toString(16).padStart(2, '0'))
+    //         .join('');
+    // }
+
+//     async function testRib(){
+//
+//         var rib = await fetch('./Unittest/Resources/DDEATH.RIB');
+//         rib = await rib.arrayBuffer()
+//         const wav = Rib.rib2pcm(new NBinary(rib));
+//
+//         const hash = await crypto.subtle.digest('SHA-1', wav.data);
+//         if(buf2hex(hash) !== "b6f017aca800afecda7f969c7a72bd8eb91e44de"){
+//             console.error("FAILED");
+//         }else {
+//
+//             console.info("OK");
+//         }
+//     }
+//
+//     async function testFsb(){
+//
+//         var fsb = await fetch('./Unittest/Resources/A15_Cemetery.fsb');
+//         fsb = await fsb.arrayBuffer()
+//         const wav = Fsb.fsb2wav(new NBinary(fsb));
+// // console.log("final wav", wav);
+//         // const hash = await crypto.subtle.digest('SHA-1', wav.data);
+//         // if(buf2hex(hash) !== "b6f017aca800afecda7f969c7a72bd8eb91e44de"){
+//         //     console.error("FAILED");
+//         // }else {
+//         //
+//         //     console.info("OK");
+//         // }
+//     }
+
+    //
+    //
+    // await Rib.processLocalFile('./Unittest/Resources/DDEATH.RIB', {
+    //     mono: false,
+    //     chunkSize: 0x400
+    // });
+    //
+    // const wav1 = Database.findOneBy({ type: MimeType.AUDIO, name: "DDEATH" });
+    // console.log(wav1);
+    // console.log(wav1.get());
+    // console.log(wav1.decode());
+
+//
+//     await Fsb.processLocalFile('./Unittest/Resources/A15_Cemetery.fsb');
+//
+//     const wav2 = Database.findOneBy({ type: MimeType.AUDIO, name: 1 });
+// console.log(wav2);
+// console.log(wav2.get());
+// console.log(wav2.decode());
+
+
+    await Fsb.processLocalFile('./Unittest/Resources/Executions.fsb');
+//
+    const wav2 = Database.findBy({ type: MimeType.AUDIO, file: 'Executions.fsb' });
+console.log(wav2[10]);
+// console.log(wav2.get());
+// console.log(wav2.decode());
+
+        document.getElementById('action').onclick = async function (){
+
+
+            //
+            const audioData = await wav2[10].decode();
+            // const url = URL.createObjectURL(new Blob([audioData.data], { type: "audio/wav" }));
+    // console.log(await (new Blob([wav.data], { type: "audio/wav" })).arrayBuffer());
+
+
+            // {
+            //     // const blob = new Blob([data.data], { type: type });
+            //     // const url = URL.createObjectURL(blob);
+            //     const a = document.createElement('a');
+            //     a.href = url;
+            //     a.download = "test.wav";
+            //     a.click();
+            //     URL.revokeObjectURL(url);
+            // }
+
+
+            //
+            // if (snd)
+            //     snd.stop();
+            //
+            // snd = new Audio(url);
+            // snd.crossOrigin = 'anonymous'; // Add this line to enable CORS
+            //
+            // snd.play();
+
+        }
+
+
+    //
+    // // testFsb();
+    // // testRib();
+    // // return;
+    // const indexTable = [
+    //     -1, -1, -1, -1, 2, 4, 6, 8,
+    //     -1, -1, -1, -1, 2, 4, 6, 8
+    // ];
+    //
+    // const stepSizeTable = [
+    //     7, 8, 9, 10, 11, 12, 13, 14,
+    //     16, 17, 19, 21, 23, 25, 28, 31,
+    //     34, 37, 41, 45, 50, 55, 60, 66,
+    //     73, 80, 88, 97, 107, 118, 130, 143,
+    //     157, 173, 190, 209, 230, 253, 279, 307,
+    //     337, 371, 408, 449, 494, 544, 598, 658,
+    //     724, 796, 876, 963, 1060, 1166, 1282, 1411,
+    //     1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024,
+    //     3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484,
+    //     7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899,
+    //     15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794,
+    //     32767
+    // ];
+    //
+    // function decodeIMAADPCM(adpcmData) {
+    //     let pcmData = [];
+    //     let index = 0;
+    //     let predictor = 0;
+    //     adpcmData.setCurrent(0);
+    //     for (let i = 0; i < adpcmData.length(); i++) {
+    //         let nibble = adpcmData.uInt8() & 0x0F;
+    //         let sign = nibble & 0x08;
+    //         let delta = nibble & 0x07;
+    //
+    //         let step = stepSizeTable[index];
+    //         let diff = step >> 3;
+    //
+    //         if (delta & 4) diff += step;
+    //         if (delta & 2) diff += step >> 1;
+    //         if (delta & 1) diff += step >> 2;
+    //         if (sign) diff = -diff;
+    //
+    //         predictor += diff;
+    //
+    //         if (predictor > 32767) predictor = 32767;
+    //         else if (predictor < -32768) predictor = -32768;
+    //
+    //         pcmData.push(predictor);
+    //
+    //         index += indexTable[nibble];
+    //         if (index < 0) index = 0;
+    //         if (index > 88) index = 88;
+    //     }
+    //
+    //     return pcmData;
+    // }
+    //
+    // async function playRib(){
+    //     var rib = await fetch('./Unittest/Resources/DDEATH.RIB');
+    //     rib = await rib.arrayBuffer()
+    //     const pcm = Rib.rib2pcm(new NBinary(rib));
+    //
+    //     var blob = new Blob([pcm.data], { type: "audio/wav" });
+    //
+    //     const url = URL.createObjectURL(blob);
+    //
+    //     var snd = new Audio(url);
+    //     snd.crossOrigin = 'anonymous'; // Add this line to enable CORS
+    //     await snd.play();
+
+    // }
+
+    // async function playFsb(){
+    //
+    //     // await Fsb.processLocalFile('./Unittest/Resources/A15_Cemetery.fsb');
+    //     //
+    //     // const wav1 = Database.findOneBy({ type: MimeType.AUDIO, name: 1 });
+    //     // console.log("wav1",wav1);
+    //     // console.log("raw",wav1.get());
+    //     // console.log("decoded",wav1.decode());
+    //     // const imaaPcm = Fsb.fsb2wav(fsb);
+    //
+    //
+    //     //todo
+    //     //https://github.com/screeny05/openrw.js/blob/b12b44b56260ca77be17874ef544b2268fb4a667/packages/scripts/explorer/library/decode-ima-adpcm.ts#L44
+    //     //imaaPCM to PCM...
+    //
+    //
+    //
+    //     //
+    //     // let pcmData = decodeIMAADPCM(imaaPcm['1.wav']);
+    //     // let channelData = [];
+    //     // for (let i = 0; i < pcmData.length; i++) {
+    //     //     channelData[i] = pcmData[i] / 32768; // PCM-Daten in den Bereich -1.0 bis 1.0 normalisieren
+    //     // }
+    //     // pcmData = new Uint16Array(pcmData);
+    //     // let mono = true;
+    //     // let aaaa = AudioWav.pcm(
+    //     //     new NBinary(pcmData.buffer),
+    //     //     2,
+    //     //     24000,
+    //     //     24000 * 16,
+    //     //     2
+    //     // )
+    //     //
+    //
+    //     var blob = new Blob([aaaa.data], { type: "audio/wav" });
+    //
+    //     const url = URL.createObjectURL(blob);
+    //
+    //     var snd = new Audio(url);
+    //     snd.crossOrigin = 'anonymous'; // Add this line to enable CORS
+    //     await snd.play();
+    //
+    // }
+//
+//     document.getElementById('action').onclick = async function (){
+//
+//         // playRib();
+//         playFsb();
+//         return;
+//         //
+//         //
+//         // console.log(wav);
+// // console.log(_arrayBufferToBase64(wav.data))
+//
+//
+//         // var fsb = await fetch('./Unittest/Resources/A15_Cemetery.fsb');
+//         // fsb = await fsb.arrayBuffer()
+//         // const wav = Fsb.fsb2wav(new NBinary(fsb));
+//         //
+//         // let pcmData = decodeIMAADPCM(wav['1.wav']);
+//         // pcmData = new Uint8Array(pcmData);
+//         // let mono = true;
+//         // let aaaa = AudioWav.pcm(
+//         //     new NBinary(pcmData.buffer),
+//         //     1,
+//         //     mono ? 22100 : 44100,
+//         //     mono ? 88200 : 176400,
+//         //     mono ? 2 : 4
+//         // )
+//
+//
+//
+//         const downloadUrl = URL.createObjectURL(blob);
+//         const a = document.createElement('a');
+//         a.href = downloadUrl;
+//         a.download = "test.wav";
+//         document.body.appendChild(a);
+//         a.click();
+//         URL.revokeObjectURL(downloadUrl);
+//
+//         return;
+//
+// //         var fsb = await fetch('./Unittest/Resources/A15_Cemetery.fsb');
+// //         fsb = await fsb.arrayBuffer()
+// //         const wav = Fsb.fsb2wav(new NBinary(fsb));
+// // console.log(wav['1.wav'])
+// //         const url = URL.createObjectURL(new Blob([wav['1.wav'].data], { type: "audio/wav" }));
+// // // console.log(await (new Blob([wav.data], { type: "audio/wav" })).arrayBuffer());
+// //         var snd = new Audio(url);
+// //         snd.crossOrigin = 'anonymous'; // Add this line to enable CORS
+// //
+// //         await snd.play();
+//     }
+
+</script>
+
+</body>
+</html>

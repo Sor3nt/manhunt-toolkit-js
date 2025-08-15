@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Manhunt 2 - PC - Test</title>
+        <style>* { padding: 0; margin: 0;}</style>
+        <script src="../../src/Layer0/FileHandler/RenderwareLoader.mjs"></script>
+    </head>
+    <body>
+
+        <div id="webgl" style="height: 100vh"></div>
+        <div id="canvas"></div>
+
+        <script type="module">
+
+            import Database from "/src/Layer0/Database.mjs";
+            import WebGl from "/src/Layer2/WebGl.mjs";
+            import MimeType from "/src/Layer0/MimeType.mjs";
+            import {Color, Skeleton, Vector3, Matrix4, Bone, AnimationMixer, SkeletonHelper as TSkeletonHelper } from "/src/Vendor/three.module.mjs";
+            import ResourceLoader from "/src/Layer1/ResourceLoader.mjs";
+            import ManhuntMatrix from "/src/Layer1/ManhuntMatrix.mjs";
+            import Manhunt2MDL from "../../src/Layer0/FileGenerator/Manhunt2.MDL.mjs";
+            import ModelMdl from "../../src/Layer0/FileHandler/Model.Mdl.mjs";
+            import SkeletonHelper from "../../src/Layer2/SkeletonHelper.mjs";
+            import ModelHelper from "../../src/Layer2/ModelHelper.mjs";
+
+
+            await ResourceLoader.load([
+
+
+                // //Load MH2 PC Model
+                '/Resources/Manhunt2/pc/danny_ingame-dasy_pc.tex',
+                '/Resources/Skeleton/manhunt_2_pc_player_3dsmax.mdl',
+                '/Resources/Manhunt2/psp_001/CutScene_MODELS.DFF',
+                // '/Resources/Skeleton/manhunt_2_pc_player_3dsmax.mdl',
+
+
+            ]);
+
+            //Load MH2 PC Animation
+            await ResourceLoader.load('/Resources/Manhunt2/pc/allanims_pc.ifp', {
+                source: { game: "mh2", platform: "pc" }
+            });
+
+            /**
+             *
+             * @param {Group} model
+             * @param {AnimationClip} animationClip
+             * @return {Promise<void>}
+             */
+            function helperPlayAnimation(model, animationClip){
+                console.log(
+                    model
+                );
+                const skeleton = model.children[0].children[0].skeleton;
+                // const skeleton = model.children[0].skeleton;
+                WebGl.scene.add( model );
+                model.userData.skeletionHelper = new TSkeletonHelper( model.children[0] );
+                WebGl.scene.add( model.userData.skeletionHelper );
+
+                // skeleton.pose()
+                // ManhuntMatrix.removeInvalidAnimationBonesBasedOnSkeleton(model.children[0].skeleton, animationClip);
+                //
+                // const mixer = new AnimationMixer(model);
+                // mixer.clipAction(animationClip).play()
+                //
+                // WebGl.onRender((delta) => { mixer.update(delta);});
+            }
+
+
+            async function reimportMdl( model, newModelName ){
+                await ModelMdl.process(Manhunt2MDL.build([model]), { name: newModelName });
+                return await Database.findOneBy({ type: MimeType.MODEL, name:newModelName }).decode();
+            }
+
+            const animation = Database.findOneBy({ type: MimeType.ANIMATION, name: "BAT_IDLE_PISS_ANIM" });
+
+            /**
+             * @type {Group} refModel
+             */
+            let refModel;
+
+            //MH2 PC to MH2 PC
+            {
+                const modelManhunt2PSP = await Database.findBy({ type: MimeType.MODEL, name: "DrWhyte_Cutscene" })[0].decode();
+                const modelManhunt2Og = await Database.findBy({ type: MimeType.MODEL, file: "manhunt_2_pc_player_3dsmax.mdl" })[0].decode();
+
+                ManhuntMatrix.removeAdditionalBones(modelManhunt2Og.children[0], modelManhunt2PSP.children[0])
+
+                helperPlayAnimation(modelManhunt2PSP, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+                modelManhunt2PSP.position.x = 0;
+                refModel = modelManhunt2PSP;
+
+                //
+                const remodel = await reimportMdl(modelManhunt2PSP, 'mh2_pc_to_mh2_pc');
+                remodel.position.x = 0;
+                remodel.position.z = 0.5;
+                helperPlayAnimation(remodel, await animation.decode({target: { game: "mh2", platform: "pc"}}));
+            }
+
+
+            WebGl.orbit();
+        </script>
+
+    </body>
+</html>

@@ -1,0 +1,831 @@
+import NBinary from "../NBinary.mjs";
+import {Bone, Box3, Matrix4, Vector3} from "../../Vendor/three.module.mjs";
+import ManhuntMatrix from "../../Layer1/ManhuntMatrix.mjs";
+import {BufferGeometryUtils} from "../../Vendor/BufferGeometryUtils.mjs";
+
+let writeOffset;
+
+/**
+ * Huge thanks to MAJEST1C_R3 & Allen!
+ *
+ * Manhunt 2 - MDL Exporter
+ */
+class Manhunt2MDL {
+
+    /**
+     * Reference Bone for vertices (vertex.applyMatrix4(entry.meshBone.matrixWorld))
+     * @type {Bone|null}
+     */
+    meshBone = null;
+
+    /**
+     * MDL Offset Table
+     * @type {int[]}
+     */
+    offsetTable = [];
+
+    /**
+     * Temporary Offset storage, will be written at end
+     * @type {int[]}
+     */
+    offsets = [];
+
+    /**
+     * Bone section start offset's
+     * @type {int[]}
+     */
+    createdBonesOffsets = [];
+
+    /**
+     * Temporary, hold the current bone index
+     * @type {int}
+     */
+    boneCreationIndex = 0;
+
+    animationDataOffset = 0;
+
+    objectInfos = [];
+
+    reset(){
+        this.offsetTable = [];
+        this.offsets = [];
+        this.createdBonesOffsets = [];
+        this.objectInfos = [];
+        this.boneCreationIndex = 0;
+        this.meshBone = null;
+        this.animationDataOffset = 0;
+    }
+    /**
+     * 
+     * @param {Group[]} groups
+     * @return {NBinary}
+     */
+    build(groups) {
+        this.reset();
+        const binary = new NBinary(new ArrayBuffer(1000000));
+
+        const textureNameOffsets = [];
+
+        let firstOffset = 0;
+        let lastOffset = 0;
+        let prevOffset = 0;
+        
+        let currentOffset = 32;
+
+        //Little helper to create and add an offset to the main table
+        writeOffset = ((binary) => {
+            return (info = "", val = undefined) => {
+                this.offsetTable.push(binary.current());
+                binary.setInt32(val || 0);
+                return binary.current() - 4;
+            };
+        })(binary);
+
+        this.createHeader(binary);
+
+        groups.forEach((group, groupIndex) => {
+
+            /**
+             * @type {SkinnedMesh}
+             */
+            const firstChild = group.children[0];
+            const bones = firstChild.skeleton.bones;
+
+            if (prevOffset)
+                this.offsets[prevOffset] = binary.current();
+
+            const beforeOffset = currentOffset;
+            currentOffset = binary.current();
+
+            if (groupIndex === 0) firstOffset = binary.current();
+            if (groupIndex === groups.length - 1) lastOffset = binary.current();
+
+            prevOffset = writeOffset('prevOffset',32);
+
+            writeOffset('beforeOffset', beforeOffset);
+            writeOffset('entryOffset', binary.current() + 8);
+
+            binary.setInt32(0); //zero ?
+
+
+            //CreateEntry
+            const objectInfoOffset = binary.current() + 20;
+            const rootOffset = binary.current();
+
+            let position = this.createEntry(binary);
+
+            const list = [];
+            this.mapBones(bones[0], list);
+            const rootBoneOffset = binary.current();
+            list.forEach((boneInfo) => {
+                this.createBone(
+                    binary,
+                    boneInfo,
+                    rootBoneOffset
+                );
+            });
+
+            //update sibling and child offsets
+            list.forEach((boneInfo) => {
+                if (boneInfo.sibling !== null){
+                    this.offsets[boneInfo.siblingBoneOffset] = boneInfo.sibling.offset;
+                }
+                if (boneInfo.children !== null){
+                    this.offsets[boneInfo.childrenBoneOffset] = boneInfo.children.offset;
+                }
+            });
+
+            if (this.animationDataOffset) {
+
+                this.offsets[this.animationDataOffset] = binary.current();
+                this.createAnimationDataIndex(binary, bones, rootBoneOffset);
+                this.offsetTable.push(binary.current());
+
+            }
+
+            this.offsets[position.firstObjectInfoOffset] = binary.current();
+
+
+            const mesheBones = group.children[0].skeleton.bones.filter((b, index) => {
+                if(b.userData.meshBoneIndex !== undefined)
+                    return true;
+
+                return false;
+            });
+
+            const meshes = [];
+            mesheBones.forEach((b, index) => {
+                if (index === 0)
+                    meshes.push(group.children[0])
+                else{
+                    meshes.push(b.children[0])
+
+                }
+            });
+
+            if (meshes.length) {
+                this.meshBone = null;
+
+                const skinFlag = typeof firstChild.geometry.attributes.skinWeight !== "undefined";
+
+                let startOfObjectInfo = 0;
+
+
+                meshes.forEach((mesh, index) => {
+                    const meshBone = mesheBones[index];
+
+                    // if (this.meshBone === null)
+                    this.meshBone = meshBone;
+
+                    // console.log(mesh);
+                    // mesh.skeleton.bones.find((b) => {
+                    //     if(b.children[0]?.type === "SkinnedMesh"){
+                    //         console.log(b)
+                    //     }
+                    // });
+                    // die;
+                    //todo cleanup
+                    // this.meshBone = mesh.children[0];
+// console.log(this.meshBone);die;
+                    if (meshes.length - 1 === index)
+                        this.offsets[position.lastObjectInfoOffset] = binary.current();
+
+                    //parseObjectInfo
+                    const prevStartOfObjectInfo = startOfObjectInfo;
+
+                    const nextObjectInfoOffset = writeOffset('nextObjectInfoOffset');
+
+
+                    let nextObjectInfoValue = 0;
+                    if (index === 0) {
+                        writeOffset('prevObjectInfoOffset', 84);
+                    }else if (meshes.length - 1 === index){
+                        nextObjectInfoValue = startOfObjectInfo;
+                    }else{
+                        this.objectInfos[index - 1].nextObjectInfoValue = binary.current();
+                        writeOffset('prevObjectInfoOffset', prevStartOfObjectInfo);
+
+                    }
+
+
+                    // console.log("write", meshBone.userData.offset);
+                    writeOffset('parentBoneOffset', meshBone.userData.offset);
+
+                    const objectOffsetPosition = writeOffset('objectOffsetPosition');
+
+                    writeOffset('rootEntryOffset', rootOffset);
+
+                    this.objectInfos.push({
+                        nextObjectInfoOffset: nextObjectInfoOffset,
+                        nextObjectInfoValue: nextObjectInfoValue,
+                    });
+
+
+                    binary.setInt32(0);
+                    binary.setInt32(3); //unk
+                    binary.setInt32(0);
+
+                    let materialOffset = 0;
+                    if (mesh.material.length) {
+
+                        const [matOffset, nameOffsets] = this.createMaterials(
+                            binary,
+                            mesh.material
+                        );
+
+                        materialOffset = matOffset;
+
+                        nameOffsets.forEach((nameOffset) => {
+                            textureNameOffsets.push(nameOffset);
+                        });
+
+                    } else {
+                        binary.setInt32(0);
+                    }
+
+                    let boneTransDataOffset = 0;
+                    if (mesh.skeleton !== undefined) {
+                        boneTransDataOffset = binary.current();
+                        this.createBoneTransDataIndex(binary, mesh);
+                    }
+
+
+                    this.offsets[objectOffsetPosition] = binary.current();
+
+                    this.createObject(
+                        binary,
+                        mesh,
+                        materialOffset,
+                        boneTransDataOffset,
+                        skinFlag
+                    );
+
+
+                    // Save objectInfo nextOffset
+                    if (group.children.length - 1 === index) {
+                        this.offsets[startOfObjectInfo] = objectInfoOffset;
+                    } else {
+                        this.offsets[startOfObjectInfo] = binary.current();
+                    }
+
+                    // Save objectInfo prevOffset
+                    if (index === 0) {
+                        this.offsets[startOfObjectInfo + 4] = objectInfoOffset;
+                    } else {
+                        this.offsets[startOfObjectInfo + 4] = prevStartOfObjectInfo;
+                    }
+                });
+
+            }
+
+        });
+
+        binary.writePadding("\x00", 16);
+
+        // Generate texture names
+        {
+            textureNameOffsets.forEach((texNameOffsetPosition) => {
+                this.offsets[texNameOffsetPosition.position] = binary.current();
+                binary.writeString(texNameOffsetPosition.name, 0);
+            });
+
+            binary.writePadding("\x00", 4);
+        }
+
+        // Last Steps: Update offsets
+        {
+            this.objectInfos.forEach((info) => {
+                this.offsets[info.nextObjectInfoOffset] = info.nextObjectInfoValue;
+                // this.offsets[info.prevObjectInfoOffset] = info.prevObjectInfoValue;
+                // this.offsets[info.objectOffset] = info.objectValue;
+            });
+
+
+            this.offsets[12] = binary.current();
+            this.offsets[16] = binary.current();
+
+            this.offsets[20] = this.offsetTable.length;
+            this.offsets[32] = firstOffset;
+            this.offsets[36] = lastOffset;
+
+            // Generate offset table
+            this.offsetTable.forEach((offset) => {
+                binary.setInt32(offset);
+            });
+
+            // Update file size
+            this.offsets[8] = binary.current();
+
+            const eof = binary.current();
+
+            for(let i in this.offsets){
+                binary.setCurrent(i);
+                binary.setInt32(this.offsets[i])
+            }
+
+            binary.setCurrent(eof);
+        }
+
+        binary.end();
+        binary.setCurrent(0);
+        return binary;
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     */
+    createHeader(binary) {
+        [
+            1129074000, // fourCC / PMLC
+            1,      // always 1
+            0,      // file size
+            0,      // offsetTable
+            0,      // offsetTable2
+            0,      // offsetTable entry count
+            0, 0,   // zero/pad
+            0,      // FirstEntryIndexOffset
+            0,      // LastEntryIndexOffset
+            0, 0    // zero/pad
+        ].forEach(val => binary.setInt32(val));
+        
+        this.offsetTable.push(
+            32,     // Point to firstOffset
+            36      // Point to lastOffset
+        );
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     */
+    createEntry(binary) {
+
+        writeOffset("rootBoneOffset", binary.current() + 32);
+        binary.setZero(3, binary.setInt32.bind(binary));
+
+        //objectInfoIndexOffset
+        binary.setInt32(binary.current() + 4);
+
+        const positions = {
+            firstObjectInfoOffset: writeOffset("firstObjectInfoOffset"),
+            lastObjectInfoOffset: writeOffset("lastObjectInfoOffset")
+        };
+
+        binary.setInt32(0); //zero
+
+        return positions;
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @param {Bone[]} allBones
+     * @param {{}} boneInfo
+     * @param rootBoneOffset
+     * @param parentBoneOffset
+     */
+    createBone(binary,  boneInfo, rootBoneOffset, parentBoneOffset = 0) {
+
+        boneInfo.bone.userData.offset = binary.current();
+        boneInfo.offset = binary.current();
+
+        binary.setInt32(0); // firstInt?
+
+        if (boneInfo.sibling !== null) boneInfo.siblingBoneOffset = writeOffset('siblingBoneOffsetPosition')
+        else binary.setInt32(0);
+
+        if (this.boneCreationIndex > 0) writeOffset('parentBoneOffset', parentBoneOffset);
+        else binary.setInt32(parentBoneOffset);
+
+        writeOffset("rootBoneOffset", rootBoneOffset);
+
+        if (boneInfo.children !== null) boneInfo.childrenBoneOffset = writeOffset("childBoneOffset");
+        else binary.setInt32(0);
+
+        if (boneInfo.bone.userData.animFlag === true) this.animationDataOffset = writeOffset('animationDataOffset');
+        else binary.setInt32(0);
+
+        binary.writeString(boneInfo.bone.userData.name.padEnd(40, "\x00"));
+
+        //Write bone matrix
+        {
+            if (boneInfo.bone.parent !== null && boneInfo.bone.parent.type === "Bone"){
+                binary.setMatrix4((new Matrix4()).multiplyMatrices(
+                    (new Matrix4()).getInverse(boneInfo.bone.parent.matrixWorld),
+                    boneInfo.bone.matrixWorld
+                ));
+            }else{
+                binary.setMatrix4(boneInfo.bone.matrixWorld);
+            }
+
+            binary.setMatrix4((new Matrix4()).fromArray([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])); //WorldCoordBoneMatrix
+        }
+    }
+
+    mapBones(bone, list) {
+        const result = {
+            id: bone.userData.boneId,
+            bone,
+            children: null,
+            sibling: null
+        };
+
+        list.push(result);
+
+        const childBones = bone.children.filter(child => child.isBone);
+        if (childBones.length > 0) {
+            result.children = this.mapBones(childBones[0], list);
+
+            let previousSibling = result.children;
+            for (let i = 1; i < childBones.length; i++) {
+                const siblingBone = childBones[i];
+                previousSibling.sibling = this.mapBones(siblingBone, list);
+                previousSibling = previousSibling.sibling;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @param {MeshBasicMaterial[]} materials
+     * @return {(*|*[])[]}
+     */
+    createMaterials(binary, materials) {
+        const materialOffset = binary.current();
+        const texNameOffsetPositions = [];
+        materials.forEach((material) => {
+            texNameOffsetPositions.push({ position: binary.current(), name: material.name });
+
+            writeOffset('textureNameOffset')
+
+            binary.setInt8(0); //bLoaded (?)
+
+            //Color
+            [material.color.r, material.color.g, material.color.b, material.opacity].forEach((val) => {
+                binary.setUInt8(val * 255.0);
+            });
+
+            //Pad
+            binary.setZero(3, binary.setInt8.bind(binary));
+        });
+
+        binary.writePadding("\x00", 16);
+
+        return [materialOffset, texNameOffsetPositions];
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @param {SkinnedMesh|Mesh} mesh
+     * @return {(function(): *)|*}
+     */
+    createBoneTransDataIndex(binary, mesh) {
+        //always 8 matrix ? todo checken
+        binary.setInt32(8);
+
+        const matrixOffset = writeOffset('BoneTransDataOffset');
+        binary.writePadding("\x00", 16);
+        this.offsets[matrixOffset] = binary.current();
+
+        //we can reuse the og values
+        if(mesh.userData.transData !== undefined){
+            mesh.userData.transData.forEach((matrix) => {
+                binary.setMatrix4(matrix);
+            });
+        }else{
+            const matrix = new Matrix4();
+            for(let i = 0; i < 8; i++){
+                binary.setMatrix4(matrix);
+            }
+        }
+    }
+
+
+    /**
+     * 
+     * @param {NBinary} binary
+     * @param {SkinnedMesh|Mesh} mesh
+     * @param {int} materialOffset
+     * @param {int} boneTransDataOffset
+     * @param {boolean} skinFlag
+     */
+    createObject(binary, mesh, materialOffset, boneTransDataOffset, skinFlag) {
+        const elementInfo = this.getVertexElementInfo(
+            mesh.geometry.attributes.uv.count,
+            mesh.geometry.attributes.uv2?.count || 0,
+            skinFlag
+        );
+
+        /**
+         * @type {BufferGeometry}
+         */
+        const mergedVerticesGeo = BufferGeometryUtils.mergeVertices(mesh.geometry)
+
+        writeOffset('materialOffset', materialOffset);
+
+        binary.setInt32(mesh.material.length);
+
+        if (boneTransDataOffset !== false)
+            writeOffset('boneTransDataOffset', boneTransDataOffset);
+        else
+            binary.setInt32(0);
+
+        //unk
+        binary.setFloat32(0); // default 0, 1 for mirror.mdl todo value checks
+        binary.setInt32(1); // default 0, 1 for mirror.mdl
+
+        //pad
+        binary.setZero(3, binary.setInt32.bind(binary));
+
+
+        binary.setInt32(0x45d454); //modelChunkFlag (PC)
+
+        const modelChunkSizeOffset = binary.current();
+        binary.setInt32(0);
+
+        binary.setInt32(0); //zero
+
+        binary.setInt32(mesh.material.length);
+        binary.setInt32(mergedVerticesGeo.index.count);
+
+        //Mesh Bounding Box
+        {
+            const bbox = this.getMeshBoundingInfos(mergedVerticesGeo);
+            binary.writeVector3(bbox.center, binary.setFloat32.bind(binary));
+            binary.setFloat32(bbox.radius);
+            binary.writeVector3(bbox.scale, binary.setFloat32.bind(binary));
+        }
+
+        //Vertex count
+        {
+            binary.setInt32(mergedVerticesGeo.attributes.position.count);
+            binary.setZero(3, binary.setInt32.bind(binary));
+        }
+
+        binary.setInt32(elementInfo.size);
+
+        //unknown
+        [0x65, 7, 0, 1, 0, 0x7C9106AB, 0x64, 6, 0, 1, 0].forEach((v) => {
+            binary.setInt32(v);
+        });
+
+        binary.setInt32(elementInfo.type);
+
+        //unknown
+        [0x14050e4, 0x1408624, 0, 0, 0x12f594, 0x330000, 0x7c91732, 5].forEach((v) => {
+            binary.setInt32(v);
+        });
+
+        this.createMaterialIDs(binary, mesh);
+
+
+        //face index
+        {
+            mergedVerticesGeo.index.array.forEach((fIndex) => {
+                binary.setInt16(fIndex);
+            });
+        }
+
+
+        const hasSkinWeights = [0x115E, 0x125E].includes(elementInfo.type);
+        const uvSetCount = elementInfo.type === 0x252 || elementInfo.type === 0x125E ? 2 :
+            elementInfo.type === 0x152 || elementInfo.type === 0x115E ? 1 : 0;
+
+        const decomposed = ManhuntMatrix.decomposeMesh(
+            mesh,
+            mergedVerticesGeo,
+            this.meshBone
+        );
+
+        decomposed.forEach((vertexInfo) => {
+
+            binary.writeVector3(vertexInfo.vertex, binary.setFloat32.bind(binary));
+
+            if (hasSkinWeights){
+                binary.setFloat32(vertexInfo.weight.w);//4
+                binary.setFloat32(vertexInfo.weight.z);//3
+                binary.setFloat32(vertexInfo.weight.y);//2
+                binary.setFloat32(vertexInfo.weight.x);//1
+
+                binary.setInt8(vertexInfo.skinIndices.w);//4
+                binary.setInt8(vertexInfo.skinIndices.z);//3
+                binary.setInt8(vertexInfo.skinIndices.y);//2
+                binary.setInt8(vertexInfo.skinIndices.x);//1
+            }
+
+            binary.writeVector3(vertexInfo.normal, binary.setInt16.bind(binary), 32768.0);
+
+            binary.setInt16(0);//zero
+
+            binary.setInt8(vertexInfo.color.b);
+            binary.setInt8(vertexInfo.color.g);
+            binary.setInt8(vertexInfo.color.r);
+            binary.setInt8(-1); //a
+
+            if (uvSetCount >= 1){
+                binary.setFloat32(vertexInfo.tu);
+                binary.setFloat32(vertexInfo.tv);
+            }
+
+            if (uvSetCount === 2){
+                binary.setFloat32(vertexInfo.tu2);
+                binary.setFloat32(vertexInfo.tv2);
+            }
+
+        });
+
+        //Update chunk size
+        this.offsets[modelChunkSizeOffset] = binary.current() - modelChunkSizeOffset;
+
+        binary.writePadding("\x00", 16);
+    }
+
+    /**
+     *
+     * @param {BufferGeometry} geometry
+     * @return {{min: *, max: *, center: *, scale: Vector3, radius: number}}
+     */
+    getMeshBoundingInfos(geometry){
+        geometry.computeBoundingBox();
+        let bbox = geometry.boundingBox;
+        let min = bbox.min.clone();
+        let max = bbox.max.clone();
+        let center = bbox.getCenter(new Vector3());
+        let scale = new Vector3().subVectors(max, min);
+        let radius = scale.length() / 2;
+
+        return { min, max, center, scale, radius };
+    }
+
+    /**
+     * 
+     * @param {NBinary} binary
+     * @param {{}[]} boneInfos
+     * @param rootBoneOffset
+     */
+    createAnimationDataIndex(binary, bones, rootBoneOffset) {
+
+        binary.setInt32(bones.length);
+        binary.setInt32(0); //unknownFlag
+
+        writeOffset("rootBoneOffset", rootBoneOffset);
+
+        const animationDataOffset = writeOffset("rootBoneOffset");
+        const boneTransformOffset = writeOffset("boneTransformOffset");
+
+        binary.setInt32(0); //zero
+
+        this.offsets[animationDataOffset] = binary.current();
+
+        //TODO, this should be the reverse bone matrix!!
+        let transformData = [];
+        bones.forEach((bone, index) => {
+            transformData.push((new Matrix4()).fromArray([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]));
+        });
+
+
+        bones.forEach((bone, index) => {
+            //todo: possible source of issue, guess we have more cases
+            if (bone.name.indexOf('bone_') !== -1){
+                const boneId = bone.userData.boneId;
+                binary.setInt16(boneId);
+                binary.setInt16(ManhuntMatrix.boneId2BoneType[boneId]);
+            }else if(bone.name === "weapstrap"){
+                binary.setInt16(-1);
+                binary.setInt16(1);
+            }else if(bone.name.indexOf('_L0') !== -1){
+                binary.setInt16(-1);
+                binary.setInt16(3);
+            }else{
+                binary.setInt16(-1);
+                binary.setInt16(0);
+            }
+
+            writeOffset('boneOffset', bone.userData.offset);
+
+            //if available, use the given transform data
+            if (bone.userData.transform !== undefined)
+                transformData = bone.userData.transform;
+        });
+
+        this.offsets[boneTransformOffset] = binary.current();
+        transformData.forEach((matrix) => {
+            binary.setMatrix4(matrix);
+        });
+
+        binary.writePadding("\x00", 16);
+    }
+
+    /**
+     *
+     * @param {NBinary} binary
+     * @param {SkinnedMesh|Mesh} mesh
+     */
+    createMaterialIDs(binary, mesh) {
+        const matBB = this.getMaterialFaceDataByMesh(mesh);
+
+        mesh.material.forEach((material, index) => {
+            binary.writeVector3(matBB[index].min, binary.setFloat32.bind(binary));
+            binary.writeVector3(matBB[index].max, binary.setFloat32.bind(binary));
+
+            binary.setInt16(mesh.geometry.groups[index].count);
+            binary.setInt16(mesh.geometry.groups[index].materialIndex);
+            binary.setInt16(mesh.geometry.groups[index].start);
+
+            binary.setUInt16(0x7C91);
+            binary.setZero(3, binary.setInt32.bind(binary));
+        });
+    }
+
+    /**
+     *
+     * @param {SkinnedMesh|Mesh} mesh
+     * @return {Box3[]}
+     */
+    getMaterialFaceDataByMesh(mesh) {
+        const geometry = mesh.geometry;
+
+        const position = geometry.attributes.position;
+        const materialCount = mesh.material.length;
+        const groups = geometry.groups;
+
+        const boundingBoxes = [];
+
+        for (let n = 0; n < materialCount; n++) {
+            const materialBoundingBox = new Box3();
+
+            const tempVertices = [];
+
+            groups.forEach((group) => {
+                if (group.materialIndex === n) {
+
+                    for (let i = group.start; i < group.start + group.count; i += 3) {
+                        const vA = new Vector3(
+                            position.getX(i),
+                            position.getY(i),
+                            position.getZ(i)
+                        );
+                        const vB = new Vector3(
+                            position.getX(i + 1),
+                            position.getY(i + 1),
+                            position.getZ(i + 1)
+                        );
+                        const vC = new Vector3(
+                            position.getX(i + 2),
+                            position.getY(i + 2),
+                            position.getZ(i + 2)
+                        );
+
+                        tempVertices.push(vA, vB, vC);
+                    }
+                }
+            });
+
+            if (tempVertices.length === 0) {
+                continue;
+            }
+
+            tempVertices.forEach((vertex) => {
+                materialBoundingBox.expandByPoint(vertex);
+            });
+
+            boundingBoxes.push(materialBoundingBox);
+        }
+
+        return boundingBoxes;
+    }
+
+    /**
+     * Determine the vertex element size and type based on uv counts and skin flag
+     *
+     * @param {int} uv1Count
+     * @param {int} uv2Count
+     * @param {boolean} skinFlag
+     * @return {{size: number, type: number}}
+     */
+    getVertexElementInfo(uv1Count, uv2Count, skinFlag) {
+        if (skinFlag === true)
+            return {
+                size: uv2Count > 2 ? 0x3C   : 0x34,
+                type: uv2Count > 2 ? 0x125E : 0x115E
+            };
+
+        if (uv1Count > 0)
+            return {
+                size: uv2Count > 2 ? 0x28   : 0x20,
+                type: uv2Count > 2 ? 0x252  : 0x152
+            };
+
+        return {
+            size: 0x18,
+            type: 0x52
+        };
+    }
+}
+
+export default new Manhunt2MDL();

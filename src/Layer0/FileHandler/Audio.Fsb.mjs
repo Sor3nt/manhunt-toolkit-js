@@ -134,62 +134,34 @@ class AudioFsb extends FileHandlerAbstract{
 
     async decode(binary, options = {}, props = {}) {
 
-        const mode = props.mode;
+        if (props.mode.indexOf('FSOUND_IMAADPCM') !== false){
+console.log(props);
 
-        if (mode.indexOf('FSOUND_IMAADPCM') !== false){
+            const { pcm, totalSamples } = AudioWav.decodeImaAdpcm(new Uint8Array(binary.data), props.channels, 36);
 
-            console.log(props);
-
-            // imaadpcm.
-
-            // return new NBinary(AudioWav.convertIMAADPCMToWav(binary.data));
-
-
-            //
-            //
-            // const samplesPerBlock = 505;
-            // const blockAlign = 256;
-            //
-            // const pcmSamples = AudioWav.decodeIMAADPCM(
-            //     binary.data,
-            //     props.channels,
-            //     blockAlign,
-            //     samplesPerBlock
-            // );
-            //
-            // const wavBlob = AudioWav.createWavFileFromPCM(pcmSamples, props.frequency, props.channels, props.bits);
-            // //
-            // return new NBinary(await wavBlob.arrayBuffer());
+            return {
+                data: pcm,
+                totalSamples,
+                play: async () => {
+                    await AudioWav.playPCM(pcm, props.channels, props.frequency);
+                }
+            };
 
 
-            const pcmSamples = imaadpcm.decode(new Uint8Array(binary.data), 19845);
-            //
-            // Richte die Web Audio API ein
-            const audioCtx = new AudioContext();
-            // Erstelle einen AudioBuffer mit einem Kanal, der Länge der Samples und der gewünschten Sample-Rate
-            const audioBuffer = audioCtx.createBuffer(1, pcmSamples.length, props.frequency);
-            // Kopiere die PCM-Daten in den Buffer
-            audioBuffer.getChannelData(0).set(pcmSamples);
+            // const blob = new Blob([binary.data], { type:"application/octet-stream"});
+            // const url = URL.createObjectURL(blob);
+            // const a = document.createElement('a');
+            // a.href = url;
+            // a.download = "test.wav";
+            // a.click();
+            // URL.revokeObjectURL(url);
 
-            // Erstelle eine Audioquelle, weise den Buffer zu und starte die Wiedergabe
-            const source = audioCtx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioCtx.destination);
-            source.start();
 
-            return;
-
-            return AudioWav.adPcm(
-                new NBinary(pcmSamples.buffer),
-                props.samples,
-                props.channels,
-                props.frequency
-            );
 
         }
 
 
-        if (mode.indexOf('FSOUND_GCADPCM') !== false)
+        if (props.mode.indexOf('FSOUND_GCADPCM') !== false)
             return AudioGenH.encodeGenH(
                 binary,
                 props.channels,

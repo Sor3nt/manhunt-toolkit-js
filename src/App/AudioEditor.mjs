@@ -17,6 +17,7 @@ import Helper from "../Helper.mjs";
 import ManhuntMatrix from "../Layer1/ManhuntMatrix.mjs";
 import Manhunt2MDL from "../Layer0/FileGenerator/Manhunt2.MDL.mjs";
 import ModelMdl from "../Layer0/FileHandler/Model.Mdl.mjs";
+import AudioWav from "../Layer0/FileHandler/Audio.Wav.mjs";
 
 export default class AudioEditor extends App{
     name = "AudioEditor";
@@ -87,31 +88,8 @@ export default class AudioEditor extends App{
                 'uuid': playUuid
             });
 
-
-            console.log(playUuid, file, (await file.decode()).data)
-            const blobUrl = URL.createObjectURL(new Blob([(await file.decode()).data], { type: "audio/wav" }));
-            // var snd = new Audio(blobUrl);
-            // snd.crossOrigin = 'anonymous'; // Add this line to enable CORS
-            //
-            // await snd.play();
-            // return;
-
-
-
-
-            // Hole den Audio-Player und setze die Blob-URL als Quelle
-            const audioPlayer = document.getElementById('audioPlayer');
-            audioPlayer.src = blobUrl;
-            //
-            // // Optional: Sobald das Audio zu Ende ist, kannst du die Blob-URL freigeben
-            // audioPlayer.onended = () => {
-            //     URL.revokeObjectURL(blobUrl);
-            // };
-
-            // Zum Abspielen
-            audioPlayer.play();
-
-
+            const pcmObj = await file.decode();
+            await pcmObj.play();
 
         });
 

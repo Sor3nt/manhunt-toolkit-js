@@ -48,10 +48,12 @@ class AudioRib extends FileHandlerAbstract {
     process(binary, infos) {
         binary.setCurrent(0);
 
+        // entry.params.duration = entry.size / entry.params.frequency;
         Database.add(
             new Result(MimeType.AUDIO, this, binary, undefined, 0, binary.length(), {
                 mono: infos.mono,
                 chunkSize: infos.chunkSize,
+                duration: 12
             }, infos.path)
         );
     }
@@ -88,13 +90,27 @@ class AudioRib extends FileHandlerAbstract {
                 });
         }
 
-        return AudioWav.pcm(
+        const pcm = AudioWav.pcm(
             result,
             this.nbChannels,
             props.mono ? 22100 : 44100,
             props.mono ? 88200 : 176400,
             props.mono ? 2 : 4
         );
+
+
+        return {
+            data: pcm,
+            totalSamples: 0,
+            play: async () => {
+
+                const blob = new Blob([pcm.data], { type: "audio/wav" });
+                const url = URL.createObjectURL(blob);
+
+                const audioElement = new Audio(url);
+                await audioElement.play();
+            }
+        };
     }
 
     /**

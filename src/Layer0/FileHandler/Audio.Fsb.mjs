@@ -123,6 +123,8 @@ class AudioFsb extends FileHandlerAbstract{
                 return false;
             }
 
+            entry.params.duration = entry.size / entry.params.frequency;
+
             Database.add(
                 new Result(MimeType.AUDIO, this, binary, entry.name, fileOff, entry.size, {...entry.params}, infos.path)
             );
@@ -135,7 +137,6 @@ class AudioFsb extends FileHandlerAbstract{
     async decode(binary, options = {}, props = {}) {
 
         if (props.mode.indexOf('FSOUND_IMAADPCM') !== false){
-console.log(props);
 
             const { pcm, totalSamples } = AudioWav.decodeImaAdpcm(new Uint8Array(binary.data), props.channels, 36);
 
@@ -146,29 +147,16 @@ console.log(props);
                     await AudioWav.playPCM(pcm, props.channels, props.frequency);
                 }
             };
-
-
-            // const blob = new Blob([binary.data], { type:"application/octet-stream"});
-            // const url = URL.createObjectURL(blob);
-            // const a = document.createElement('a');
-            // a.href = url;
-            // a.download = "test.wav";
-            // a.click();
-            // URL.revokeObjectURL(url);
-
-
-
+        // }else if (props.mode.indexOf('FSOUND_GCADPCM') !== false){
+            // return AudioGenH.encodeGenH(
+            //     binary,
+            //     props.channels,
+            //     props.frequency,
+            //     props.moreSizeDump,
+            //     props.moreSize
+            // );
         }
 
-
-        if (props.mode.indexOf('FSOUND_GCADPCM') !== false)
-            return AudioGenH.encodeGenH(
-                binary,
-                props.channels,
-                props.frequency,
-                props.moreSizeDump,
-                props.moreSize
-            );
 
         helper.log(this.tag, `Mode "${mode.join(',')}" is not supported.`, 'error');
 

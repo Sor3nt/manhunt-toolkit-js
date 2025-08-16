@@ -1,23 +1,8 @@
 import App from "./App.mjs";
 import AppMenu from "./AppMenu.mjs";
 import ResourceLoader from "../Layer1/ResourceLoader.mjs";
-import NBinary from "../Layer0/NBinary.mjs";
 import Database from "../Layer0/Database.mjs";
-import WebGl from "../Layer2/WebGl.mjs";
 import MimeType from "./../Layer0/MimeType.mjs";
-import {
-    AnimationMixer,
-    Matrix4,
-    Skeleton,
-    SkeletonHelper as TSkeletonHelper,
-    Vector4
-} from "../Vendor/three.module.mjs";
-import SkeletonHelper from "../Layer2/SkeletonHelper.mjs";
-import Helper from "../Helper.mjs";
-import ManhuntMatrix from "../Layer1/ManhuntMatrix.mjs";
-import Manhunt2MDL from "../Layer0/FileGenerator/Manhunt2.MDL.mjs";
-import ModelMdl from "../Layer0/FileHandler/Model.Mdl.mjs";
-import AudioWav from "../Layer0/FileHandler/Audio.Wav.mjs";
 
 export default class AudioEditor extends App{
     name = "AudioEditor";
@@ -29,14 +14,14 @@ export default class AudioEditor extends App{
 
     async load() {
 
-        await ResourceLoader.load([
-            '/src/App/AudioEditor/Resources/Executions.fsb'
-        ]);
+        // await ResourceLoader.load([
+        //     '/src/App/AudioEditor/Resources/Executions.fsb'
+        // ]);
         //
-        // await ResourceLoader.load('/Unittest/Resources/DDEATH.RIB', {
-        //     mono: false,
-        //     chunkSize: 0x400
-        // });
+        await ResourceLoader.load('/Unittest/Resources/DDEATH.RIB', {
+            mono: false,
+            chunkSize: 0x400
+        });
 
 
         await super.load();
@@ -57,26 +42,18 @@ export default class AudioEditor extends App{
 
         fileList.forEach((file, index) => {
 
-            const info = {
-                size: file.size,
-                name: file.name,
-                index
-            };
             const template = fileTemplate.cloneNode(true);
             template.classList.remove('template');
             template.querySelector('[data-play]').setAttribute('data-play', file.uuid);
-            template.querySelector('[data-text="headline"]').innerHTML = `${info.name} <small class="text-muted">Subtitle 1</small>`;;
-            template.querySelector('[data-text="size"]').textContent = info.size + 'b';
+            template.querySelector('[data-text="headline"]').innerHTML = `${file.name} <small class="text-muted">Subtitle 1</small>`;;
+            template.querySelector('[data-text="size"]').textContent = (file.size / 1024).toFixed(2) + 'kb';
+            template.querySelector('[data-text="length"]').textContent = parseFloat(file.props.duration).toFixed(2) + 's';
             fileContainer.append(template);
-
         })
-
-
     }
 
     async createEvents() {
         const fileContainer = this.appContent.querySelector('[data-output="files"]');
-
 
         fileContainer.addEventListener('click', async (event) => {
 
@@ -89,8 +66,8 @@ export default class AudioEditor extends App{
             });
 
             const pcmObj = await file.decode();
+            console.log(pcmObj);
             await pcmObj.play();
-
         });
 
     }
